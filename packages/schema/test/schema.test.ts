@@ -51,7 +51,7 @@ describe("motion vocabulary", () => {
 
 describe("text", () => {
   it("normalizes whitespace, quotes and keeps å ä ö", () => {
-    expect(normalizeText("  Välkommen till “Åre” – här\n\n")).toBe('Välkommen till "Åre" - här');
+    expect(normalizeText("  Välkommen\u00a0till “Åre” – här\n\n")).toBe('Välkommen till "Åre" - här');
   });
   it("collects verbatim section texts", () => {
     expect(

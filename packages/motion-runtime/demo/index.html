@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="sv" data-motion-intensity="0.8" data-motion-smooth="true">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Motion runtime demo</title>
+<script src="/runtime/boot.js"></script>
+<link rel="stylesheet" href="/runtime/runtime.css">
+<style>
+:root{--color-bg:#0d0d10;--color-fg:#f4f1ea;--color-surface:#17171c;--color-surface-2:#22222a;--color-accent:#ff5a1f;--color-accent-fg:#111;--color-brand:#3b82f6;--color-muted:#a3a3a3;--color-line:#2e2e36}
+*{box-sizing:border-box}body{margin:0;font:18px/1.6 system-ui,sans-serif}
+section{min-height:100vh;padding:10vh 8vw;position:relative}
+h1{font-size:clamp(3rem,9vw,8rem);line-height:.95;margin:0}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}.card{background:var(--color-surface);padding:32px;border-radius:20px;min-height:220px}
+.track > div{width:60vw;height:60vh;margin-right:4vw;background:var(--color-surface-2);border-radius:24px;flex-shrink:0;display:grid;place-items:center;font-size:3rem}
+.stack > div{height:70vh;border-radius:28px;background:var(--color-surface);margin-bottom:24px;display:grid;place-items:center;font-size:3rem;border:1px solid var(--color-line)}
+.marquee{display:flex;gap:3rem;font-size:4rem;font-weight:700;white-space:nowrap}
+</style>
+<script type="module" src="/runtime/motion.js"></script>
+</head>
+<body>
+<div data-motion="scroll-progress"></div>
+<div data-motion="cursor-follow" data-cursor-follow-style="ring"></div>
+<section id="hero" data-motion="webgl-gradient" data-webgl-gradient-intensity="0.8">
+  <h1 id="title" data-motion="split-text" data-split-text-by="words" data-split-text-style="rise">Vi bygger hem som håller</h1>
+  <p id="lead" data-motion="reveal" data-reveal-delay="0.3">Totalentreprenad för kök, badrum och tillbyggnader.</p>
+  <a id="cta" href="#kontakt" data-motion="magnetic" style="display:inline-block;padding:16px 28px;background:var(--color-accent);color:var(--color-accent-fg);border-radius:999px">Boka hembesök</a>
+</section>
+<section id="cards"><h2 data-motion="reveal">Tjänster</h2><div class="grid" data-motion="stagger"><div class="card" data-motion="tilt-3d">Kök</div><div class="card">Badrum</div><div class="card">Tillbyggnader</div></div>
+<p id="count"><span data-motion="counter">1 200</span> projekt sedan 1998</p>
+<p id="hl" data-motion="text-highlight" style="font-size:2.5rem">Fast pris, egna hantverkare och tio års garanti på allt arbete vi gör.</p></section>
+<section id="pin" data-motion="pin-scrub" data-pin-scrub-length="2"><div class="steps"><div data-step><h3>Skiss</h3></div><div data-step><h3>Bygg</h3></div><div data-step><h3>Klart</h3></div></div></section>
+<section id="horiz" data-motion="horizontal-scroll" style="padding:0"><div data-track class="track"><div>1</div><div>2</div><div>3</div><div>4</div></div></section>
+<section id="stack"><div class="stack" data-motion="sticky-stack"><div>A</div><div>B</div><div>C</div></div></section>
+<section id="dark" data-motion="bg-shift" data-bg-shift-tone="accent"><div class="marquee" id="mq" data-motion="marquee"><span>Kök</span><span>Badrum</span><span>Tak</span></div>
+<div id="persp" data-motion="perspective-in" style="height:300px;background:var(--color-surface-2);border-radius:24px"></div>
+<div id="blob" data-motion="webgl-blob" style="height:60vh"></div></section>
+<section id="kontakt"><h2 data-motion="blur-in">Kontakt</h2><div data-motion="clip-reveal" data-clip-reveal-shape="circle" style="height:300px;background:var(--color-brand)"></div><div data-motion="float" style="width:80px;height:80px;border-radius:50%;background:var(--color-accent)"></div><div data-motion="parallax" data-parallax-speed="0.5">Parallax</div></section>
+</body>
+</html>

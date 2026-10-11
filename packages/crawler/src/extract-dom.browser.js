@@ -4,7 +4,7 @@
 // normalized and validated on the Node side (see extract.ts).
 (() => {
   const MAX_TEXT = 20000;
-  const norm = (s) => (s || "").replace(/[  ]/g, " ").replace(/[ \t\f\v]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+  const norm = (s) => (s || "").replace(/[\u00a0\u202f]/g, " ").replace(/[ \t\f\v]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
   const oneLine = (s) => norm(s).replace(/\n+/g, " ");
   const abs = (u) => {
     try {
