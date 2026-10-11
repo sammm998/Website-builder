@@ -1,0 +1,113 @@
+import { createServer } from "node:http";
+import { setGlobalDispatcher, EnvHttpProxyAgent } from "undici";
+import { chromium, type Browser } from "playwright";
+import { AiError, AnthropicProvider, FakeProvider } from "@redesign/ai";
+import { connect } from "./db";
+import { loadEnv, type Env } from "./env";
+import { createStorage } from "./storage";
+import { claimJob, completeJob, heartbeat, pauseJob, recoverStaleJobs } from "./queue";
+import { JobCancelled, JobContext, type JobRow, type Services } from "./context";
+import { runCrawl } from "./jobs/crawl";
+import { runAnalyze } from "./jobs/analyze";
+import { runDirection, runDirections } from "./jobs/directions";
+import { runBuild } from "./jobs/build";
+import { runPublish } from "./jobs/publish";
+
+const HANDLERS: Record<JobRow["kind"], (ctx: JobContext) => Promise<void>> = {
+  crawl: runCrawl,
+  analyze: runAnalyze,
+  directions: runDirections,
+  direction: runDirection,
+  build: runBuild,
+  publish: runPublish,
+};
+
+export function createServices(env: Env): Services & { close: () => Promise<void> } {
+  let browser: Promise<Browser> | null = null;
+  const sql = connect(env.DATABASE_URL);
+  return {
+    sql,
+    env,
+    storage: createStorage(env),
+    ai: env.AI_PROVIDER === "fake" ? new FakeProvider() : new AnthropicProvider(),
+    browser: () => {
+      browser ??= chromium.launch({ executablePath: env.CHROMIUM_PATH, args: ["--disable-dev-shm-usage", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+      return browser;
+    },
+    close: async () => {
+      await (await browser)?.close().catch(() => {});
+      await sql.end({ timeout: 5 });
+    },
+  };
+}
+
+/** Runs one job to completion or pause. Exported for tests. */
+export async function processJob(services: Services, job: JobRow): Promise<void> {
+  const ctx = new JobContext(job, services);
+  const beat = setInterval(() => void heartbeat(services.sql, job.id).catch(() => {}), 30_000);
+  try {
+    await HANDLERS[job.kind](ctx);
+    await completeJob(services.sql, job.id);
+  } catch (error) {
+    if (error instanceof JobCancelled) return;
+    const message = error instanceof AiError ? error.message : `${(error as Error).message}`;
+    console.error(`[job ${job.id} ${job.kind}]`, error);
+    await pauseJob(services.sql, job.id, message);
+    if (job.kind === "crawl" || job.kind === "build") {
+      await services.sql`update projects set status = ${`${job.kind}-paused`} where id = ${job.project_id}`;
+    }
+  } finally {
+    clearInterval(beat);
+  }
+}
+
+/** Claims and processes jobs until `stop` resolves true. */
+export async function runLoop(services: Services, opts: { concurrency: number; once?: boolean; signal?: AbortSignal }) {
+  const active = new Set<Promise<void>>();
+  let lastRecovery = 0;
+  while (!opts.signal?.aborted) {
+    if (Date.now() - lastRecovery > 60_000) {
+      lastRecovery = Date.now();
+      await recoverStaleJobs(services.sql).catch((e) => console.error("recovery failed", e));
+    }
+    if (active.size < opts.concurrency) {
+      const job = await claimJob(services.sql).catch((e) => (console.error("claim failed", e), null));
+      if (job) {
+        const p = processJob(services, job).finally(() => active.delete(p));
+        active.add(p);
+        continue;
+      }
+      if (opts.once && active.size === 0) break;
+    }
+    await new Promise((r) => setTimeout(r, active.size ? 250 : 1000));
+  }
+  await Promise.all(active);
+}
+
+async function main() {
+  const env = loadEnv();
+  // Respect HTTP(S)_PROXY for outbound API calls when configured.
+  if (process.env["HTTPS_PROXY"] || process.env["HTTP_PROXY"]) setGlobalDispatcher(new EnvHttpProxyAgent());
+  const services = createServices(env);
+  const controller = new AbortController();
+  const server = createServer((req, res) => {
+    if (req.url === "/health") return void res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true }));
+    res.writeHead(404).end();
+  }).listen(env.WORKER_PORT);
+  const shutdown = async () => {
+    controller.abort();
+    server.close();
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  console.log(`[worker] started (concurrency ${env.WORKER_CONCURRENCY}, ai ${env.AI_PROVIDER}, storage ${env.STORAGE_DRIVER})`);
+  await runLoop(services, { concurrency: env.WORKER_CONCURRENCY, signal: controller.signal });
+  await services.close();
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
