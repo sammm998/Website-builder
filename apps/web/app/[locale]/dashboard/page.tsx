@@ -34,7 +34,6 @@ export default async function Dashboard({ params }: { params: Promise<{ locale: 
                 <Link href={`/${locale}/projects/${p.id}`} className="block">
                   <div className="aspect-[16/10] overflow-hidden bg-bone">
                     {p.thumbnail ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={`/api/screens/${p.thumbnail}`} alt="" className="h-full w-full object-cover object-top transition duration-700 ease-expo group-hover:scale-[1.03]" />
                     ) : null}
                   </div>

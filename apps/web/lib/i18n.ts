@@ -25,6 +25,7 @@ const sv = {
       { title: "Webbplats", text: "Hela sajten byggs, kvalitetsgranskas visuellt, översätts och publiceras på din domän." },
     ],
   },
+  showcase: { eyebrow: "Tre riktningar per projekt", title: "Varje sajt får tre tydligt olika, levande designer att välja mellan." },
   compare: { eyebrow: "Före och efter", title: "Samma innehåll. En helt ny känsla.", hint: "Dra för att jämföra", before: "Före", after: "Efter", illustrative: "Illustrativa exempel" },
   features: {
     eyebrow: "Byggt för att imponera – och ranka",
@@ -190,6 +191,7 @@ const en: Dict = {
       { title: "Website", text: "The whole site is built, visually reviewed, translated and published on your domain." },
     ],
   },
+  showcase: { eyebrow: "Three directions per project", title: "Every site gets three clearly different, living designs to choose from." },
   compare: { eyebrow: "Before and after", title: "Same content. A whole new feeling.", hint: "Drag to compare", before: "Before", after: "After", illustrative: "Illustrative examples" },
   features: {
     eyebrow: "Built to impress – and to rank",

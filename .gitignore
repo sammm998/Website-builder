@@ -13,3 +13,5 @@ test-results
 supabase/.temp
 .DS_Store
 .localdb
+apps/web/test-results
+apps/web/playwright-report

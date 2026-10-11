@@ -38,7 +38,6 @@ export function DesignStep({ state, t, act, selected, onSelect }: { state: Wizar
             <article key={d.id} className={clsx("group grid content-start overflow-hidden rounded-3xl border bg-chalk transition", isSelected ? "border-ink ring-2 ring-ink" : "border-ink/10")}>
               <button className="relative block aspect-[16/10] overflow-hidden bg-bone text-left" onClick={() => setPreview(d)} aria-label={`${t.design.preview}: ${d.name}`}>
                 {d.screenshot_desktop ? (
-                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={`/api/screens/${d.screenshot_desktop}`} alt="" className="h-full w-full object-cover object-top transition duration-700 ease-expo group-hover:scale-[1.04]" />
                 ) : null}
                 <span className="absolute inset-x-4 bottom-4 inline-flex w-fit items-center gap-2 rounded-full bg-ink/80 px-3 py-1.5 text-xs text-chalk opacity-0 backdrop-blur transition group-hover:opacity-100">
