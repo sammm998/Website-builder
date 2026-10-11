@@ -21,8 +21,8 @@ export async function readObject(bucket: Bucket, path: string): Promise<Buffer |
   if (path.includes("..")) return null;
   const e = env();
   if (e.STORAGE_DRIVER === "local") {
-    const root = resolve(process.cwd(), e.LOCAL_STORAGE_DIR, bucket);
-    const file = resolve(root, path);
+    const root = resolve(/*turbopackIgnore: true*/ process.cwd(), e.LOCAL_STORAGE_DIR, bucket);
+    const file = resolve(/*turbopackIgnore: true*/ root, path);
     if (!file.startsWith(`${root}/`)) return null;
     return readFile(file).catch(() => null);
   }

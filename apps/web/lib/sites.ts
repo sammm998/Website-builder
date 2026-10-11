@@ -8,7 +8,7 @@ import { env } from "./env";
 import { publicMediaUrl, storageOrigin } from "./storage";
 
 // The runtime is copied into public/ at build time (scripts/copy-assets.mjs).
-configureRuntimeDir(join(process.cwd(), "public/runtime/v1"));
+configureRuntimeDir(join(/*turbopackIgnore: true*/ process.cwd(), "public/runtime/v1"));
 
 const EMBED_HOSTS = "https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://www.google.com https://maps.google.com";
 const WORKER_ASSET_HOST = "https://assets.redesign.internal";

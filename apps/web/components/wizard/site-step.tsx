@@ -16,7 +16,7 @@ export function SiteStep({ state, t, act }: { state: WizardState; t: Dict["wizar
   const build = state.build;
   const defaultLang = state.project.source_language ?? "sv";
   const [current, setCurrent] = useState<{ path: string; lang: string }>({ path: "/", lang: defaultLang });
-  const [slug, setSlug] = useState(state.site?.slug ?? slugify(state.project.name || new URL(state.project.source_url).hostname.replace(/^www\./, "")));
+  const [slug, setSlug] = useState(state.site?.slug ?? state.suggestedSlug);
   const [domain, setDomain] = useState("");
   const [copied, setCopied] = useState(false);
   const languages = useMemo(() => [...new Set(build?.pages.map((p) => p.lang) ?? [])].sort((a, b) => Number(b === defaultLang) - Number(a === defaultLang)), [build, defaultLang]);

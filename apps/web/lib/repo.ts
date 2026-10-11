@@ -125,6 +125,30 @@ export interface WizardState {
   site: { id: string; slug: string; version: number; published_at: Date; url: string } | null;
   domains: { id: string; hostname: string; status: string; verification: unknown }[];
   cost: number;
+  /** Free site address suggestion (only when not yet published). */
+  suggestedSlug: string;
+}
+
+export function slugify(s: string): string {
+  return (
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 50) || "min-sajt"
+  );
+}
+
+async function freeSlug(base: string, projectId: string): Promise<string> {
+  const db = sql();
+  const taken = new Set(
+    (await db<{ slug: string }[]>`select slug from published_sites where (slug = ${base} or slug like ${`${base}-%`}) and project_id <> ${projectId}`).map((r) => r.slug),
+  );
+  if (!taken.has(base)) return base;
+  for (let i = 2; i < 500; i++) if (!taken.has(`${base}-${i}`)) return `${base}-${i}`;
+  return `${base}-${Date.now().toString(36)}`;
 }
 
 export function siteUrl(slug: string): string {
@@ -174,6 +198,7 @@ export async function wizardState(userId: string, projectId: string): Promise<Wi
     site,
     domains,
     cost: Number(cost[0]?.total ?? 0),
+    suggestedSlug: site?.slug ?? (await freeSlug(slugify(project.name || new URL(project.source_url).hostname.replace(/^www\./, "")), projectId)),
   };
 }
 

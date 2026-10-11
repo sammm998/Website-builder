@@ -11,7 +11,7 @@
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test",
-    "test": "node build.mjs && vitest run"
+    "test": "vitest run"
   },
   "dependencies": {
     "@redesign/schema": "workspace:*",

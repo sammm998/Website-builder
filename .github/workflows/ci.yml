@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium for Playwright
+        run: pnpm --filter @redesign/crawler exec playwright install --with-deps chromium
+      - name: Resolve Chromium path
+        run: echo "CHROMIUM_PATH=$(pnpm --filter @redesign/crawler exec node -e "console.log(require('playwright').chromium.executablePath())" | tail -1)" >> "$GITHUB_ENV"
+      - run: pnpm --filter @redesign/motion-runtime build
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - name: RLS tests
+        run: bash supabase/tests/run.sh
+      - name: Unit, integration and visual tests
+        run: pnpm turbo run test --filter='!@redesign/web'
