@@ -1,0 +1,29 @@
+{
+  "name": "@redesign/renderer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@redesign/fonts": "workspace:*",
+    "@redesign/motion-runtime": "workspace:*",
+    "@redesign/sanitizer": "workspace:*",
+    "@redesign/schema": "workspace:*",
+    "@tailwindcss/node": "4.3.3",
+    "domhandler": "^5.0.3",
+    "htmlparser2": "^10.0.0",
+    "tailwindcss": "4.3.3"
+  },
+  "devDependencies": {
+    "@redesign/fixtures": "workspace:*",
+    "playwright": "1.56.1",
+    "sharp": "^0.34.4"
+  }
+}

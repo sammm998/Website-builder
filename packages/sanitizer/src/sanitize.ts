@@ -125,7 +125,7 @@ const MEDIA_RE = /^media:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 const FORM_RE = /^form:([a-z0-9-]{1,64})$/;
 const CLASS_TOKEN_RE = /^[A-Za-z0-9_\-:/.[\]%#(),!@*&>+~=|]+$/;
 const ID_RE = /^[A-Za-z][\w-]{0,63}$/;
-const MARKER_ATTRS = new Set(["data-step", "data-step-progress", "data-track", "data-toggle", "data-target", "data-tab", "data-panel", "data-count"]);
+const MARKER_ATTRS = new Set(["data-step", "data-step-progress", "data-lang-switch", "data-track", "data-toggle", "data-target", "data-tab", "data-panel", "data-count"]);
 
 export function escapeText(s: string): string {
   return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));

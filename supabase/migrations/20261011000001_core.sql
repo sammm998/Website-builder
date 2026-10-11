@@ -176,8 +176,8 @@ create table public.site_builds (
   user_id uuid not null references auth.users(id) on delete cascade,
   direction_id uuid not null references public.design_directions(id) on delete restrict,
   status text not null default 'building' check (status in ('building', 'qa', 'complete', 'paused', 'failed')),
-  header_html text,
-  footer_html text,
+  -- { "<lang>": { "header": "<html>", "footer": "<html>" } }
+  layouts jsonb not null default '{}'::jsonb,
   css text,
   qa_summary jsonb,
   created_at timestamptz not null default now(),

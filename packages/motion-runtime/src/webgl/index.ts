@@ -116,7 +116,13 @@ export function gradient(host: HTMLElement): Cleanup {
   const speed = numberParam(host, "webgl-gradient", "speed");
   const strength = numberParam(host, "webgl-gradient", "intensity");
   const grain = boolParam(host, "webgl-gradient", "grain");
-  const s = stage(host, { behind: true, alpha: false });
+  // Over a photo the gradient becomes a tinted light layer instead of an opaque background.
+  const overImage = !!host.querySelector("img, video");
+  const s = stage(host, { behind: true, alpha: overImage });
+  if (overImage) {
+    s.canvas.style.mixBlendMode = "soft-light";
+    s.canvas.style.opacity = "0.85";
+  }
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const uniforms = {
