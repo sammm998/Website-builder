@@ -13,4 +13,8 @@ export default tseslint.config(
       "@typescript-eslint/consistent-type-imports": "error",
     },
   },
+  {
+    files: ["**/test/**", "**/*.test.ts", "**/e2e/**"],
+    rules: { "@typescript-eslint/no-explicit-any": "off", "@typescript-eslint/no-non-null-assertion": "off" },
+  },
 );
