@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** Path segment under which the web app serves the runtime: /runtime/v<major>/... */
 export const RUNTIME_VERSION = "1";
@@ -9,13 +11,32 @@ export interface RuntimeManifest {
   files: Record<string, { integrity: string; bytes: number }>;
 }
 
-/** Reads the built manifest (requires `pnpm --filter @redesign/motion-runtime build`). */
+let configuredDir: string | null = process.env["REDESIGN_RUNTIME_DIR"] ?? null;
+
+/**
+ * Directory with the built runtime (boot.js, motion.js, runtime.css, manifest.json). Defaults to this
+ * package's dist/; bundled apps (Next.js) set REDESIGN_RUNTIME_DIR or call configureRuntimeDir().
+ */
+export function runtimeDir(): string {
+  return configuredDir ?? join(dirname(fileURLToPath(import.meta.url)), "..", "dist");
+}
+
+export function configureRuntimeDir(dir: string) {
+  configuredDir = dir;
+  manifestCache = null;
+  cssCache = null;
+}
+
+let manifestCache: RuntimeManifest | null = null;
+let cssCache: string | null = null;
+
 export function runtimeManifest(): RuntimeManifest {
-  return JSON.parse(readFileSync(new URL("../dist/manifest.json", import.meta.url), "utf8")) as RuntimeManifest;
+  manifestCache ??= JSON.parse(readFileSync(join(runtimeDir(), "manifest.json"), "utf8")) as RuntimeManifest;
+  return manifestCache;
 }
 
 export function runtimeCss(): string {
-  return readFileSync(new URL("./runtime.css", import.meta.url), "utf8");
+  cssCache ??= readFileSync(join(runtimeDir(), "runtime.css"), "utf8");
+  return cssCache;
 }
 
-export const RUNTIME_DIST_DIR = new URL("../dist/", import.meta.url).pathname;

@@ -1,9 +1,10 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { compile } from "@tailwindcss/node";
 import { FONT_CATALOG, RADIUS_PX, SECTION_SPACING, type DesignSystem } from "@redesign/schema";
 import { fontFaceCss } from "@redesign/fonts";
 import { runtimeCss } from "@redesign/motion-runtime";
 
-const BASE_DIR = new URL("..", import.meta.url).pathname;
 
 const TRACKING: Record<DesignSystem["typography"]["displayTracking"], string> = {
   tighter: "-0.045em",
@@ -209,6 +210,11 @@ ${ds.texture.grain ? "body::before{content:'';position:fixed;inset:0;pointer-eve
 `;
 }
 
+/** Directory from which "tailwindcss" is resolvable (this package). */
+function defaultBase(): string {
+  return process.env["REDESIGN_TAILWIND_BASE"] ?? dirname(dirname(fileURLToPath(import.meta.url)));
+}
+
 /** Collects class tokens from HTML fragments (Tailwind candidates). */
 export function classCandidates(fragments: readonly string[]): string[] {
   const out = new Set<string>();
@@ -223,8 +229,8 @@ export function classCandidates(fragments: readonly string[]): string[] {
 }
 
 /** Compiles the complete stylesheet for a site: fonts + base + tailwind utilities + motion runtime. */
-export async function buildSiteCss(ds: DesignSystem, fragments: readonly string[], assetBase = ""): Promise<string> {
-  const compiler = await compile(tailwindEntry(ds), { base: BASE_DIR, onDependency: () => {} });
+export async function buildSiteCss(ds: DesignSystem, fragments: readonly string[], assetBase = "", base = defaultBase()): Promise<string> {
+  const compiler = await compile(tailwindEntry(ds), { base, onDependency: () => {} });
   const utilities = compiler.build(classCandidates(fragments));
   return `${baseCss(ds, assetBase)}\n${utilities}\n${runtimeCss()}`;
 }

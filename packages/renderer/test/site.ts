@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import sharp from "sharp";
 import { sampleDirection, sampleMedia, sampleSourcePage, MEDIA, ORIGIN } from "@redesign/fixtures";
-import { fontFiles } from "@redesign/fonts";
-import { RUNTIME_DIST_DIR } from "@redesign/motion-runtime";
+import { allFontSources } from "@redesign/fonts/node";
+import { runtimeDir } from "@redesign/motion-runtime";
 import { buildSiteCss, renderPage, type MediaAsset, type SiteContext, type PageInput } from "../src";
 
 export const COLORS: Record<string, string> = { [MEDIA.hero]: "#1d3b2a", [MEDIA.kok]: "#8a5a2b", [MEDIA.badrum]: "#2b5a8a", [MEDIA.tillbyggnad]: "#5a8a2b", [MEDIA.logo]: "#f3efe6" };
@@ -74,12 +74,12 @@ export async function renderHome(base: string, overrides: Partial<SiteContext> =
 
 /** Serves rendered HTML plus runtime, fonts and generated images. */
 export async function startSiteServer(getHtml: () => string) {
-  const fonts = new Map(["fraunces", "inter-tight"].flatMap((f) => fontFiles(f as "fraunces").map((x) => [x.file, x.source] as const)));
+  const fonts = allFontSources();
   const cache = new Map<string, Buffer>();
   const server = createServer(async (req, res) => {
     const url = (req.url ?? "/").split("?")[0]!;
     if (url.startsWith("/runtime/v1/")) {
-      const file = join(RUNTIME_DIST_DIR, url.slice("/runtime/v1/".length));
+      const file = join(runtimeDir(), url.slice("/runtime/v1/".length));
       if (!existsSync(file)) return void res.writeHead(404).end();
       return void res.writeHead(200, { "content-type": extname(file) === ".js" ? "text/javascript" : "text/css", "access-control-allow-origin": "*" }).end(readFileSync(file));
     }

@@ -1,22 +1,12 @@
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
 import { FONT_CATALOG, type FontId } from "@redesign/schema";
+import { AVAILABLE_FILES } from "./files.gen";
+import { STATIC_WEIGHTS, SUBSETS } from "./spec";
 
 /**
  * Self-hosted font files (Fontsource, OFL licensed). Only latin + latin-ext subsets are shipped,
- * which cover Swedish, the other Nordic languages and most European languages.
+ * which cover Swedish, the other Nordic languages and most European languages. This entry point is
+ * bundler-safe (no filesystem access); see ./node for source paths.
  */
-
-const STATIC_WEIGHTS: Partial<Record<FontId, number[]>> = {
-  "instrument-serif": [400],
-  "dm-serif-display": [400],
-  "space-mono": [400, 700],
-};
-
-const SUBSETS = [
-  { name: "latin-ext", range: "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF" },
-  { name: "latin", range: "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD" },
-] as const;
 
 export interface FontFile {
   font: FontId;
@@ -26,32 +16,18 @@ export interface FontFile {
   unicodeRange: string;
   weight: string;
   style: "normal" | "italic";
-  /** Absolute path in node_modules (for copying at build time). */
-  source: string;
-}
-
-const require = createRequire(import.meta.url);
-
-function packageDir(font: FontId): string {
-  const pkg = STATIC_WEIGHTS[font] ? `@fontsource/${font}` : `@fontsource-variable/${font}`;
-  return dirname(require.resolve(`${pkg}/package.json`));
 }
 
 export function fontFiles(font: FontId): FontFile[] {
+  const available = new Set(AVAILABLE_FILES[font] ?? []);
   const id = FONT_CATALOG[font].file;
-  const dir = join(packageDir(font), "files");
   const out: FontFile[] = [];
   for (const subset of SUBSETS) {
     for (const style of ["normal", "italic"] as const) {
       const weights = STATIC_WEIGHTS[font];
-      if (weights) {
-        for (const w of weights) {
-          const file = `${id}-${subset.name}-${w}-${style}.woff2`;
-          out.push({ font, file, subset: subset.name, unicodeRange: subset.range, weight: String(w), style, source: join(dir, file) });
-        }
-      } else {
-        const file = `${id}-${subset.name}-wght-${style}.woff2`;
-        out.push({ font, file, subset: subset.name, unicodeRange: subset.range, weight: "100 900", style, source: join(dir, file) });
+      for (const w of weights ?? ["wght"]) {
+        const file = `${id}-${subset.name}-${w}-${style}.woff2`;
+        if (available.has(file)) out.push({ font, file, subset: subset.name, unicodeRange: subset.range, weight: weights ? String(w) : "100 900", style });
       }
     }
   }
@@ -59,14 +35,10 @@ export function fontFiles(font: FontId): FontFile[] {
 }
 
 /** @font-face rules for a font, referencing `${baseUrl}/fonts/<file>`. */
-export function fontFaceCss(font: FontId, baseUrl: string, existing?: (path: string) => boolean): string {
+export function fontFaceCss(font: FontId, baseUrl: string): string {
   const family = FONT_CATALOG[font].family;
   return fontFiles(font)
-    .filter((f) => !existing || existing(f.source))
-    .map(
-      (f) =>
-        `@font-face{font-family:"${family}";font-style:${f.style};font-weight:${f.weight};font-display:swap;src:url(${baseUrl}/fonts/${f.file}) format("woff2");unicode-range:${f.unicodeRange}}`,
-    )
+    .map((f) => `@font-face{font-family:"${family}";font-style:${f.style};font-weight:${f.weight};font-display:swap;src:url(${baseUrl}/fonts/${f.file}) format("woff2");unicode-range:${f.unicodeRange}}`)
     .join("\n");
 }
 

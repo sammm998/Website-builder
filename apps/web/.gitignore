@@ -1,0 +1,4 @@
+public/runtime
+public/fonts
+.storage
+next-env.d.ts

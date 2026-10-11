@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
-import { fontFiles } from "@redesign/fonts";
-import { FONT_IDS, type DesignSystem, type Facts, type GeneratedSection, type SourcePage } from "@redesign/schema";
-import { RUNTIME_DIST_DIR } from "@redesign/motion-runtime";
+import { allFontSources } from "@redesign/fonts/node";
+import type { DesignSystem, Facts, GeneratedSection, SourcePage } from "@redesign/schema";
+import { runtimeDir } from "@redesign/motion-runtime";
 import { buildSiteCss, renderPage, type MediaAsset, type SiteContext, type SitePageRef } from "@redesign/renderer";
 import type { Sql } from "./db";
 import type { Env } from "./env";
@@ -78,7 +78,7 @@ export async function renderDocument(
   return { ...renderPage(page, ctx, styles), css: styles };
 }
 
-const fontFileMap = new Map(FONT_IDS.flatMap((f) => fontFiles(f).map((x) => [x.file, x.source] as const)));
+const fontFileMap = allFontSources();
 
 /**
  * Browser context that serves the runtime and fonts from local files and the local storage driver
@@ -94,7 +94,7 @@ export async function renderContext(browser: Browser, env: Env, opts: { width: n
   await context.route(`${ASSET_HOST}/**`, async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.startsWith("/runtime/v1/")) {
-      const file = join(RUNTIME_DIST_DIR, path.slice("/runtime/v1/".length).replace(/\.\./g, ""));
+      const file = join(runtimeDir(), path.slice("/runtime/v1/".length).replace(/\.\./g, ""));
       return route.fulfill({ body: await readFile(file).catch(() => Buffer.from("")), contentType: file.endsWith(".js") ? "text/javascript" : "text/css", headers: { "access-control-allow-origin": "*" } });
     }
     if (path.startsWith("/fonts/")) {
