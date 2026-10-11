@@ -123,6 +123,7 @@ create table public.media (
   -- photo | logo | icon | avatar | badge | illustration
   role text not null default 'photo',
   variants jsonb not null default '[]'::jsonb,
+  placeholder text,
   error text,
   created_at timestamptz not null default now(),
   unique (project_id, source_url)
