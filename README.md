@@ -27,7 +27,8 @@ Effekterna (WebGL, pinnade skrollberättelser, split text, parallax, 3D-tilt …
 | `packages/ai` | Claude-provider, designerpromptar, pipeline (analys → riktningar → sidor → översättning → kritik), validering och reparation, samt en deterministisk fake-provider |
 | `packages/fonts` | Kurerade, självhostade typsnitt (Fontsource, latin + latin-ext) |
 | `packages/fixtures` | Delade testdata |
-| `supabase/` | Migrationer med RLS, RLS-tester och CLI-konfiguration |
+| `packages/migrate` | Migrationskörare (`pnpm db:migrate`): `_migrations`-tabell, advisory lock, en transaktion per fil |
+| `supabase/` | Migrationer med RLS (fungerar på vanlig Postgres och på Supabase), RLS-tester och CLI-konfiguration |
 
 ## Garantier i pipelinen
 
@@ -51,13 +52,14 @@ Krav: Node 22, pnpm 10, PostgreSQL 16 (binärer) och Chromium (Playwright).
 pnpm install
 pnpm --filter @redesign/motion-runtime build
 
-# 1) Databas: lokal Postgres med auth-stub och alla migrationer (port 54322)
+# 1) Databas: lokal Postgres med alla migrationer (port 54322)
 bash scripts/local-db.sh
 
 # 2) Webbapp (dev-inloggning, lokal lagring)
 cp apps/web/.env.example apps/web/.env.local   # sätt sedan:
 #   DATABASE_URL=postgres://postgres@127.0.0.1:54322/postgres
 #   AUTH_DRIVER=dev  STORAGE_DRIVER=local  LOCAL_STORAGE_DIR=../../.localdb/storage
+#   (AUTH_DRIVER=password ger riktiga konton med lösenord, som i produktion)
 pnpm --filter @redesign/web dev
 
 # 3) Worker (AI_PROVIDER=fake fungerar utan nyckel; anthropic kräver ANTHROPIC_API_KEY)
@@ -91,20 +93,26 @@ Testerna omfattar bland annat:
 
 ## Driftsättning
 
-1. **Supabase**
-   - Skapa ett projekt och kör `supabase link` och sedan `supabase db push`. Det skapar tabeller, RLS och buckets: `site-media` (publik) och `screens` (privat).
-   - Aktivera e-post och Google under *Authentication → Providers*.
-   - Lägg till `https://DIN-APP/auth/callback` som redirect-URL.
-2. **Webbappen på Vercel**
-   - Rotkatalog `apps/web`. Byggkommandot `pnpm --filter @redesign/web build` kopierar runtime och typsnitt till `public/`.
-   - Sätt miljövariablerna från `apps/web/.env.example`.
-   - Publicerade sajter på subdomäner: sätt `SITES_DOMAIN` och peka `*.SITES_DOMAIN` (wildcard) mot Vercel.
-   - Egna domäner: sätt `VERCEL_API_TOKEN` och `VERCEL_PROJECT_ID`. Appen lägger då till och verifierar domäner automatiskt.
-3. **Workern på Railway eller Fly**
-   - Bygg `apps/worker/Dockerfile` från repots rot (Playwright-image med Chromium).
-   - Sätt variablerna från `apps/worker/.env.example`, inklusive `ANTHROPIC_API_KEY`. Hälsokontroll: `GET /health`.
-   - Skala med fler instanser eller `WORKER_CONCURRENCY`. Kön använder `FOR UPDATE SKIP LOCKED`.
-4. **Formulär (valfritt):** sätt `RESEND_API_KEY` för e-postnotiser till sajtägaren.
+**Railway (rekommenderat, allt på ett ställe):**
+
+- Web, worker, Postgres och en Storage Bucket.
+- Egen inloggning med e-post/lösenord och Google.
+- Migrationer körs automatiskt vid deploy.
+
+Steg för steg med exakta variabler finns i **[docs/railway.md](docs/railway.md)**. Hälsokontroll: `GET /api/health`.
+
+**Alternativ med Supabase:**
+
+- Sätt `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` och `SUPABASE_SERVICE_ROLE_KEY`. Då används Supabase för inloggning (`AUTH_DRIVER=supabase`) och lagring (`STORAGE_DRIVER=supabase`).
+- Kör `pnpm db:migrate` med Supabase-databasens `DATABASE_URL`. Supabase-förutsättningarna finns redan, och plattformsmigrationen hoppar då över dem.
+- Aktivera Google under *Authentication → Providers* och lägg till `https://DIN-APP/auth/callback` som redirect-URL.
+
+**Gemensamt:**
+
+- **Publicerade sajter på subdomäner:** sätt `SITES_DOMAIN` och peka `*.SITES_DOMAIN` (wildcard) mot webben.
+- **Egna domäner via Vercel (valfritt):** `VERCEL_API_TOKEN` och `VERCEL_PROJECT_ID`. Utan dessa verifieras domäner manuellt via DNS.
+- **Skalning:** fler worker-instanser eller `WORKER_CONCURRENCY`. Kön använder `FOR UPDATE SKIP LOCKED`.
+- **Formulär (valfritt):** `RESEND_API_KEY` för e-postnotiser till sajtägaren.
 
 ## AI och kostnad
 

@@ -3,7 +3,7 @@ import { setGlobalDispatcher, EnvHttpProxyAgent } from "undici";
 import { chromium, type Browser } from "playwright";
 import { AiError, AnthropicProvider, FakeProvider } from "@redesign/ai";
 import { connect } from "./db";
-import { loadEnv, type Env } from "./env";
+import { ConfigError, loadEnv, type Env } from "./env";
 import { createStorage } from "./storage";
 import { claimJob, completeJob, heartbeat, pauseJob, recoverStaleJobs } from "./queue";
 import { JobCancelled, JobContext, type JobRow, type Services } from "./context";
@@ -84,8 +84,16 @@ export async function runLoop(services: Services, opts: { concurrency: number; o
   await Promise.all(active);
 }
 
-async function main() {
-  const env = loadEnv();
+export async function main() {
+  let env: Env;
+  try {
+    env = loadEnv();
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    // Keep the message readable in platform logs instead of a validation stack trace.
+    console.error(`[worker] ${error.message}\nSee docs/railway.md for the required variables.`);
+    process.exit(1);
+  }
   // Respect HTTP(S)_PROXY for outbound API calls when configured.
   if (process.env["HTTPS_PROXY"] || process.env["HTTP_PROXY"]) setGlobalDispatcher(new EnvHttpProxyAgent());
   const services = createServices(env);
@@ -106,6 +114,7 @@ async function main() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // Started directly (dev). In containers src/start.ts runs migrations first, then main().
   main().catch((e) => {
     console.error(e);
     process.exit(1);

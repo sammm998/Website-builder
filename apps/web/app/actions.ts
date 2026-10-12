@@ -10,7 +10,8 @@ import { env } from "@/lib/env";
 import { isLocale, type Locale } from "@/lib/i18n";
 import * as repo from "@/lib/repo";
 import { addDomain, removeDomain, verifyDomain } from "@/lib/domains";
-import { clearDevSession, createDevSession } from "@/lib/session";
+import { signIn, signUp } from "@/lib/password-auth";
+import { clearSession, createSession } from "@/lib/session";
 import { supabaseServer } from "@/lib/supabase";
 
 export interface ActionResult {
@@ -55,11 +56,22 @@ export async function loginAction(_prev: ActionResult, form: FormData): Promise<
   const email = z.string().trim().toLowerCase().email().safeParse(form.get("email"));
   if (!email.success) return { ok: false, error: "Enter a valid email address." };
   const mode = String(form.get("mode") ?? "password");
-  if (env().AUTH_DRIVER === "dev") {
+  const driver = env().AUTH_DRIVER;
+  if (driver === "dev") {
     const db = sql();
-    const [existing] = await db<{ id: string }[]>`select id from auth.users where email = ${email.data}`;
+    const [existing] = await db<{ id: string }[]>`select id from auth.users where lower(email) = ${email.data}`;
     const id = existing?.id ?? (await db<{ id: string }[]>`insert into auth.users (email) values (${email.data}) returning id`)[0]!.id;
-    await createDevSession(id, email.data);
+    await createSession(id, email.data);
+    redirect(safeNext(form.get("next"), locale));
+  }
+  const password = String(form.get("password") ?? "");
+  if (driver === "password") {
+    try {
+      const u = mode === "signup" ? await signUp(email.data, password) : await signIn(email.data, password);
+      await createSession(u.id, u.email);
+    } catch (error) {
+      return fail(error);
+    }
     redirect(safeNext(form.get("next"), locale));
   }
   const supabase = await supabaseServer();
@@ -68,7 +80,6 @@ export async function loginAction(_prev: ActionResult, form: FormData): Promise<
     const { error } = await supabase.auth.signInWithOtp({ email: email.data, options: { emailRedirectTo: `${origin}/auth/callback?next=/${locale}/dashboard` } });
     return error ? { ok: false, error: error.message } : { ok: true, message: "sent" };
   }
-  const password = String(form.get("password") ?? "");
   if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." };
   if (mode === "signup") {
     const { error } = await supabase.auth.signUp({ email: email.data, password, options: { emailRedirectTo: `${origin}/auth/callback?next=/${locale}/dashboard` } });
@@ -81,10 +92,12 @@ export async function loginAction(_prev: ActionResult, form: FormData): Promise<
 
 export async function googleLoginAction(form: FormData) {
   const locale = loc(form.get("locale"));
+  const next = safeNext(form.get("next"), locale);
+  if (env().AUTH_DRIVER === "password") redirect(`/auth/google?${new URLSearchParams({ locale, next })}`);
   const supabase = await supabaseServer();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: `${env().APP_ORIGIN}/auth/callback?next=/${locale}/dashboard` },
+    options: { redirectTo: `${env().APP_ORIGIN}/auth/callback?next=${encodeURIComponent(next)}` },
   });
   if (error || !data.url) redirect(`/${locale}/login?error=oauth`);
   redirect(data.url);
@@ -92,8 +105,8 @@ export async function googleLoginAction(form: FormData) {
 
 export async function logoutAction(form: FormData) {
   const locale = loc(form.get("locale"));
-  if (env().AUTH_DRIVER === "dev") await clearDevSession();
-  else await (await supabaseServer()).auth.signOut();
+  if (env().AUTH_DRIVER === "supabase") await (await supabaseServer()).auth.signOut();
+  else await clearSession();
   redirect(`/${locale}`);
 }
 

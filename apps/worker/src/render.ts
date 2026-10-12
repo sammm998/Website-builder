@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { allFontSources } from "@redesign/fonts/node";
 import type { DesignSystem, Facts, GeneratedSection, SourcePage } from "@redesign/schema";
@@ -7,7 +7,7 @@ import { runtimeDir } from "@redesign/motion-runtime";
 import { buildSiteCss, renderPage, type MediaAsset, type SiteContext, type SitePageRef } from "@redesign/renderer";
 import type { Sql } from "./db";
 import type { Env } from "./env";
-import type { Storage } from "./storage";
+import { createStorage, storagePublicBase, type Bucket, type Storage } from "./storage";
 
 /** Fake origin for runtime/fonts inside worker screenshots; fulfilled from local files. */
 export const ASSET_HOST = "https://assets.redesign.internal";
@@ -80,6 +80,13 @@ export async function renderDocument(
 
 const fontFileMap = allFontSources();
 
+const storageCache = new WeakMap<Env, Storage>();
+function storageFor(env: Env): Storage {
+  let storage = storageCache.get(env);
+  if (!storage) storageCache.set(env, (storage = createStorage(env)));
+  return storage;
+}
+
 /**
  * Browser context that serves the runtime and fonts from local files and the local storage driver
  * from disk, so screenshots never depend on the web app being reachable.
@@ -103,13 +110,15 @@ export async function renderContext(browser: Browser, env: Env, opts: { width: n
     }
     return route.fulfill({ status: 404, body: "" });
   });
-  if (env.STORAGE_DRIVER === "local") {
-    const prefix = env.LOCAL_STORAGE_PUBLIC_URL.replace(/\/$/, "");
+  if (env.STORAGE_DRIVER === "local" || env.STORAGE_DRIVER === "s3") {
+    // Media URLs point at the web app; read the objects directly so screenshots don't depend on it.
+    const prefix = storagePublicBase(env);
+    const storage = storageFor(env);
     await context.route(`${prefix}/**`, async (route) => {
       const rel = decodeURIComponent(route.request().url().slice(prefix.length + 1).split("?")[0]!);
-      if (rel.includes("..")) return route.fulfill({ status: 400 });
-      const file = join(resolve(process.cwd(), env.LOCAL_STORAGE_DIR), rel);
-      const body = await readFile(file).catch(() => null);
+      const [bucket, ...rest] = rel.split("/");
+      if (rel.includes("..") || (bucket !== "site-media" && bucket !== "screens")) return route.fulfill({ status: 404 });
+      const body = await storage.get(bucket as Bucket, rest.join("/")).catch(() => null);
       if (!body) return route.fulfill({ status: 404 });
       const type = rel.endsWith(".webp") ? "image/webp" : rel.endsWith(".avif") ? "image/avif" : rel.endsWith(".png") ? "image/png" : rel.endsWith(".mp4") ? "video/mp4" : "image/jpeg";
       return route.fulfill({ body, contentType: type });

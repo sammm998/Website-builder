@@ -1,0 +1,22 @@
+{
+  "name": "@redesign/migrate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "redesign-migrate": "./src/cli.ts"
+  },
+  "scripts": {
+    "migrate": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "postgres": "^3.4.7",
+    "tsx": "^4.20.6"
+  }
+}

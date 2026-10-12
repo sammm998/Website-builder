@@ -103,4 +103,33 @@ do $$ begin
   end;
 end $$;
 reset role;
+
+-- ---- own-auth tables: server only ----
+insert into public.user_credentials (user_id, password_hash) values ('00000000-0000-0000-0000-00000000000a', 'scrypt$x$y');
+insert into public.oauth_identities (provider, subject, user_id) values ('google', 'g-a', '00000000-0000-0000-0000-00000000000a');
+insert into public.login_attempts (key) values ('a@example.com');
+do $$
+declare r text; t text;
+begin
+  foreach r in array array['anon', 'authenticated'] loop
+    foreach t in array array['user_credentials', 'oauth_identities', 'login_attempts'] loop
+      execute format('set local role %I', r);
+      perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+      begin
+        execute format('select 1 from public.%I', t);
+        raise exception 'FAILED: % could read %', r, t;
+      exception when insufficient_privilege then raise notice 'ok: % cannot read %', r, t;
+      end;
+      reset role;
+    end loop;
+  end loop;
+end $$;
+select pg_temp.expect((select relrowsecurity from pg_class where oid = 'public.user_credentials'::regclass), 'credentials have RLS enabled');
+do $$ begin
+  begin
+    insert into auth.users (email) values ('A@example.com');
+    raise exception 'FAILED: duplicate email (case-insensitive) accepted';
+  exception when unique_violation then raise notice 'ok: emails are unique case-insensitively';
+  end;
+end $$;
 \echo 'ALL RLS TESTS PASSED'

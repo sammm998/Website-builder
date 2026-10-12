@@ -74,6 +74,7 @@ const sv = {
     devNote: "Utvecklingsläge: ange valfri e-post för att logga in.",
     switchToSignUp: "Inget konto? Skapa ett",
     switchToSignIn: "Har du konto? Logga in",
+    oauthError: "Inloggningen med Google misslyckades. Försök igen.",
   },
   dashboard: { title: "Projekt", new: "Nytt projekt", empty: "Inga projekt ännu. Börja med att klistra in en adress.", open: "Öppna", delete: "Ta bort", confirmDelete: "Ta bort projektet permanent?" },
   newProject: {
@@ -240,6 +241,7 @@ const en: Dict = {
     devNote: "Development mode: enter any email to log in.",
     switchToSignUp: "No account? Create one",
     switchToSignIn: "Have an account? Log in",
+    oauthError: "Google sign-in failed. Please try again.",
   },
   dashboard: { title: "Projects", new: "New project", empty: "No projects yet. Start by pasting an address.", open: "Open", delete: "Delete", confirmDelete: "Delete this project permanently?" },
   newProject: {

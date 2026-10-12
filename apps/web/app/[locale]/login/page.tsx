@@ -2,16 +2,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { env } from "@/lib/env";
+import { googleConfigured } from "@/lib/google-oauth";
 import { dict, isLocale } from "@/lib/i18n";
 import { Logo } from "@/components/ui";
 import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<{ next?: string }> }) {
+export default async function LoginPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<{ next?: string; error?: string }> }) {
   const { locale: raw } = await params;
   const locale = isLocale(raw) ? raw : "sv";
-  const { next } = await searchParams;
+  const { next, error } = await searchParams;
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : `/${locale}/dashboard`;
   if (await currentUser()) redirect(safeNext);
   const t = dict(locale);
@@ -33,7 +34,14 @@ export default async function LoginPage({ params, searchParams }: { params: Prom
           </Link>
           <h1 className="display text-5xl">{t.auth.title}</h1>
           <p className="mb-10 mt-3 text-stone">{t.auth.lead}</p>
-          <LoginForm locale={locale} t={t.auth} dev={env().AUTH_DRIVER === "dev"} next={safeNext} />
+          <LoginForm
+            locale={locale}
+            t={t.auth}
+            driver={env().AUTH_DRIVER}
+            google={env().AUTH_DRIVER === "supabase" || (env().AUTH_DRIVER === "password" && googleConfigured())}
+            next={safeNext}
+            initialError={error === "oauth" ? t.auth.oauthError : undefined}
+          />
         </div>
       </section>
     </main>

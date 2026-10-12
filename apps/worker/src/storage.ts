@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { createClient } from "@supabase/supabase-js";
 import type { Env } from "./env";
 
@@ -52,9 +53,54 @@ class SupabaseStorage implements Storage {
   }
 }
 
+/**
+ * S3-compatible bucket (Railway Storage Buckets, R2, MinIO …). The bucket stays private: objects are
+ * keyed `<bucket>/<path>` and site media is served publicly by the web app under /storage/site-media.
+ */
+class S3Storage implements Storage {
+  constructor(
+    private client: S3Client,
+    private bucketName: string,
+    private publicBase: string,
+  ) {}
+  async put(bucket: Bucket, path: string, body: Buffer, contentType: string) {
+    await this.client.send(
+      new PutObjectCommand({ Bucket: this.bucketName, Key: s3Key(bucket, path), Body: body, ContentType: contentType, CacheControl: "public, max-age=31536000, immutable" }),
+    );
+  }
+  async get(bucket: Bucket, path: string) {
+    const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucketName, Key: s3Key(bucket, path) }));
+    if (!res.Body) throw new Error(`Storage download failed: ${bucket}/${path}`);
+    return Buffer.from(await res.Body.transformToByteArray());
+  }
+  publicUrl(bucket: Bucket, path: string) {
+    return `${this.publicBase}/${bucket}/${path}`;
+  }
+}
+
+export function s3Key(bucket: Bucket, path: string): string {
+  if (path.split("/").some((part) => part === ".." || part === "")) throw new Error("Invalid storage path");
+  return `${bucket}/${path}`;
+}
+
+export function s3Client(env: Pick<Env, "S3_ENDPOINT" | "S3_REGION" | "S3_ACCESS_KEY_ID" | "S3_SECRET_ACCESS_KEY">): S3Client {
+  return new S3Client({
+    endpoint: env.S3_ENDPOINT,
+    region: env.S3_REGION,
+    forcePathStyle: true,
+    credentials: { accessKeyId: env.S3_ACCESS_KEY_ID!, secretAccessKey: env.S3_SECRET_ACCESS_KEY! },
+  });
+}
+
 export function createStorage(env: Env): Storage {
   if (env.STORAGE_DRIVER === "local") return new LocalStorage(resolve(process.cwd(), env.LOCAL_STORAGE_DIR), env.LOCAL_STORAGE_PUBLIC_URL);
+  if (env.STORAGE_DRIVER === "s3") return new S3Storage(s3Client(env), env.S3_BUCKET!, storagePublicBase(env));
   return new SupabaseStorage(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
-export { LocalStorage };
+/** URL prefix under which the web app serves stored objects (local and s3 drivers). */
+export function storagePublicBase(env: Pick<Env, "STORAGE_DRIVER" | "LOCAL_STORAGE_PUBLIC_URL" | "APP_ORIGIN">): string {
+  return (env.STORAGE_DRIVER === "local" ? env.LOCAL_STORAGE_PUBLIC_URL : `${env.APP_ORIGIN}/storage`).replace(/\/+$/, "");
+}
+
+export { LocalStorage, S3Storage };

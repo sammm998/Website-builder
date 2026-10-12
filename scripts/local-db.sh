@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Starts (or reuses) a local Postgres for development at $PGDATA_DIR (default .localdb) on port 54322,
-# with the Supabase auth stub and all migrations applied on first start.
+# with all migrations applied on first start (the platform migration provides roles and the auth schema).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIR="${PGDATA_DIR:-$ROOT/.localdb}"
@@ -18,7 +18,6 @@ if ! $RUN "$PGBIN/pg_ctl" -D "$DIR/data" status >/dev/null 2>&1; then
 fi
 if [ "${FRESH:-0}" = "1" ]; then
   PSQL=(psql -h 127.0.0.1 -p "$PORT" -U postgres -d postgres -v ON_ERROR_STOP=1 -q)
-  "${PSQL[@]}" -f "$ROOT/supabase/tests/stub.sql"
   for f in "$ROOT"/supabase/migrations/*.sql; do "${PSQL[@]}" -f "$f"; done
 fi
 echo "postgres://postgres@127.0.0.1:$PORT/postgres"

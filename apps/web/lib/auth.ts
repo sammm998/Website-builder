@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { env } from "./env";
-import { readDevSession } from "./session";
+import { readSession } from "./session";
 import { supabaseServer } from "./supabase";
 
 export interface User {
@@ -10,7 +10,7 @@ export interface User {
 }
 
 export async function currentUser(): Promise<User | null> {
-  if (env().AUTH_DRIVER === "dev") return readDevSession();
+  if (env().AUTH_DRIVER !== "supabase") return readSession();
   const supabase = await supabaseServer();
   const { data } = await supabase.auth.getUser();
   return data.user ? { id: data.user.id, email: data.user.email ?? "" } : null;

@@ -10,6 +10,7 @@ import { Showcase } from "@/components/landing/showcase";
 import { Features } from "@/components/landing/features";
 import { Faq, FinalCta, Footer, Pricing } from "@/components/landing/sections";
 import { RespectMotion } from "@/components/landing/motion-config";
+import { appOrigin } from "@/lib/hosts";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
   const locale = isLocale(raw) ? raw : "sv";
   const t = dict(locale);
   const user = await currentUser().catch(() => null);
-  const origin = process.env["APP_ORIGIN"] ?? "http://localhost:3000";
+  const origin = appOrigin();
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [

@@ -11,7 +11,7 @@ function pgBin(): string {
   return `/usr/lib/postgresql/${dirs.at(-1)}/bin`;
 }
 
-/** Throwaway Postgres cluster with the Supabase auth stub and all migrations applied. */
+/** Throwaway Postgres cluster with all migrations applied. */
 export async function startDatabase() {
   const dir = mkdtempSync(join(tmpdir(), "redesign-pg-"));
   const port = 55000 + Math.floor(Math.random() * 2000);
@@ -35,7 +35,6 @@ export async function startDatabase() {
     }
   }
   const admin = postgres(url, { max: 1, onnotice: () => {} });
-  await admin.unsafe(readFileSync(join(ROOT, "supabase/tests/stub.sql"), "utf8"));
   for (const f of readdirSync(join(ROOT, "supabase/migrations")).sort()) {
     await admin.unsafe(readFileSync(join(ROOT, "supabase/migrations", f), "utf8"));
   }

@@ -2,5 +2,8 @@
 **/.next
 **/dist
 **/.turbo
+**/.storage
+**/test-results
+**/playwright-report
 .git
-.storage
+.localdb

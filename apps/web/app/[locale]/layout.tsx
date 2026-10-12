@@ -2,12 +2,13 @@ import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { isLocale, LOCALES } from "@/lib/i18n";
 import "../globals.css";
+import { appOrigin } from "@/lib/hosts";
 
 export const viewport: Viewport = { themeColor: "#0f0f0d", width: "device-width", initialScale: 1 };
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  const origin = process.env["APP_ORIGIN"] ?? "http://localhost:3000";
+  const origin = appOrigin();
   const sv = locale === "sv";
   return {
     metadataBase: new URL(origin),

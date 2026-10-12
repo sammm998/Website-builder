@@ -17,6 +17,21 @@ test("redesign journey", async ({ page }) => {
   const email = `e2e-${Date.now()}@example.com`;
   await page.goto("/sv/login");
   await page.getByLabel("E-post").fill(email);
+  if (process.env["E2E_AUTH"] === "password") {
+    // Own accounts: create one, log out, log back in with the password.
+    await page.getByRole("button", { name: "Inget konto? Skapa ett" }).click();
+    await page.getByLabel("Lösenord").fill("e2e-lösenord-123");
+    await page.getByRole("button", { name: "Skapa konto" }).click();
+    await expect(page).toHaveURL(/\/sv\/dashboard/);
+    await page.context().clearCookies();
+    await page.goto("/sv/login");
+    await page.getByLabel("E-post").fill(email);
+    await page.getByLabel("Lösenord").fill("fel-lösenord-123");
+    await page.getByRole("button", { name: "Logga in" }).click();
+    await expect(page.getByText("Wrong email or password.")).toBeVisible();
+    await page.getByLabel("E-post").fill(email);
+    await page.getByLabel("Lösenord").fill("e2e-lösenord-123");
+  }
   await page.getByRole("button", { name: "Logga in" }).click();
   await expect(page).toHaveURL(/\/sv\/dashboard/);
   await shot(page, "01-dashboard");

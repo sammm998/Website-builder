@@ -14,7 +14,8 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "format": "prettier --write .",
-    "db:test": "bash supabase/tests/run.sh"
+    "db:test": "bash supabase/tests/run.sh",
+    "db:migrate": "pnpm --filter @redesign/migrate migrate"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",

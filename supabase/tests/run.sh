@@ -12,7 +12,7 @@ if [ "$(id -u)" = "0" ]; then chown -R postgres "$TMP"; RUN="runuser -u postgres
 $RUN "$PGBIN/initdb" -D "$TMP/data" -U postgres -A trust >/dev/null
 $RUN "$PGBIN/pg_ctl" -D "$TMP/data" -o "-p $PORT -k $TMP -c listen_addresses=''" -l "$TMP/log" start >/dev/null
 PSQL=(psql -h "$TMP" -p "$PORT" -U postgres -d postgres -v ON_ERROR_STOP=1 -q)
-"${PSQL[@]}" -f "$ROOT/supabase/tests/stub.sql"
+# The platform migration (…000000) creates the Supabase roles and auth schema on plain Postgres.
 for f in "$ROOT"/supabase/migrations/*.sql; do "${PSQL[@]}" -f "$f"; done
 set +e
 OUT="$("${PSQL[@]}" -f "$ROOT/supabase/tests/rls.sql" 2>&1)"; CODE=$?
