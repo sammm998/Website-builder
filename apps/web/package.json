@@ -7,7 +7,7 @@
     "prepare-assets": "tsx scripts/copy-assets.mjs",
     "dev": "tsx scripts/copy-assets.mjs && next dev",
     "build": "tsx scripts/copy-assets.mjs && next build",
-    "start": "next start",
+    "start": "tsx ../../packages/migrate/src/cli.ts --soft && next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint app lib components",
     "test": "vitest run --passWithNoTests",
@@ -20,6 +20,7 @@
     "@react-three/drei": "10.7.9",
     "@react-three/fiber": "9.8.1",
     "@redesign/fonts": "workspace:*",
+    "@redesign/migrate": "workspace:*",
     "@redesign/motion-runtime": "workspace:*",
     "@redesign/renderer": "workspace:*",
     "@redesign/sanitizer": "workspace:*",
@@ -37,6 +38,7 @@
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
     "three": "0.186.1",
+    "tsx": "^4.20.6",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -45,7 +47,6 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@types/three": "0.186.0",
-    "tailwindcss": "4.3.3",
-    "tsx": "^4.20.6"
+    "tailwindcss": "4.3.3"
   }
 }

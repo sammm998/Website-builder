@@ -4,7 +4,7 @@ import { chromium, type Browser } from "playwright";
 import { AiError, AnthropicProvider, FakeProvider } from "@redesign/ai";
 import { connect } from "./db";
 import { ConfigError, loadEnv, type Env } from "./env";
-import { createStorage } from "./storage";
+import { bindStorage, createStorage } from "./storage";
 import { claimJob, completeJob, heartbeat, pauseJob, recoverStaleJobs } from "./queue";
 import { JobCancelled, JobContext, type JobRow, type Services } from "./context";
 import { runCrawl } from "./jobs/crawl";
@@ -25,10 +25,12 @@ const HANDLERS: Record<JobRow["kind"], (ctx: JobContext) => Promise<void>> = {
 export function createServices(env: Env): Services & { close: () => Promise<void> } {
   let browser: Promise<Browser> | null = null;
   const sql = connect(env.DATABASE_URL);
+  const storage = createStorage(env, sql);
+  bindStorage(env, storage);
   return {
     sql,
     env,
-    storage: createStorage(env),
+    storage,
     ai: env.AI_PROVIDER === "fake" ? new FakeProvider() : new AnthropicProvider(),
     browser: () => {
       browser ??= chromium.launch({ executablePath: env.CHROMIUM_PATH, args: ["--disable-dev-shm-usage", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
@@ -90,18 +92,14 @@ export async function main() {
     env = loadEnv();
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
-    // Keep the message readable in platform logs instead of a validation stack trace.
-    console.error(`[worker] ${error.message}\nSee docs/railway.md for the required variables.`);
-    process.exit(1);
+    // Missing configuration is not a crash: stay up (no restart loop) and say exactly what is missing.
+    return waitForConfig(error.problems);
   }
   // Respect HTTP(S)_PROXY for outbound API calls when configured.
   if (process.env["HTTPS_PROXY"] || process.env["HTTP_PROXY"]) setGlobalDispatcher(new EnvHttpProxyAgent());
   const services = createServices(env);
   const controller = new AbortController();
-  const server = createServer((req, res) => {
-    if (req.url === "/health") return void res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true }));
-    res.writeHead(404).end();
-  }).listen(env.WORKER_PORT);
+  const server = healthServer(env.WORKER_PORT, () => ({ ok: true }));
   const shutdown = async () => {
     controller.abort();
     server.close();
@@ -111,6 +109,31 @@ export async function main() {
   console.log(`[worker] started (concurrency ${env.WORKER_CONCURRENCY}, ai ${env.AI_PROVIDER}, storage ${env.STORAGE_DRIVER})`);
   await runLoop(services, { concurrency: env.WORKER_CONCURRENCY, signal: controller.signal });
   await services.close();
+}
+
+function healthServer(port: number, body: () => object) {
+  return createServer((req, res) => {
+    if (req.url === "/health") return void res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(body()));
+    res.writeHead(404).end();
+  }).listen(port);
+}
+
+/** Idles with a health endpoint and a periodic log until the platform redeploys with the variables set. */
+async function waitForConfig(problems: string[]): Promise<void> {
+  const port = Number(process.env["WORKER_PORT"] || process.env["PORT"] || 8080);
+  const message = `[worker] waiting for configuration. Missing or invalid:\n${problems.map((p) => `  - ${p}`).join("\n")}\nSee docs/railway.md. No jobs run until these are set.`;
+  console.error(message);
+  const server = healthServer(port, () => ({ ok: false, waiting: "config", missing: problems }));
+  const timer = setInterval(() => console.error(message), 60_000);
+  await new Promise<void>((resolve) => {
+    const stop = () => {
+      clearInterval(timer);
+      server.close();
+      resolve();
+    };
+    process.once("SIGTERM", stop);
+    process.once("SIGINT", stop);
+  });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

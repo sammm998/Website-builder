@@ -2,8 +2,8 @@ import { z } from "zod";
 
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
-  /** supabase | s3 (Railway bucket or any S3-compatible store) | local */
-  STORAGE_DRIVER: z.enum(["supabase", "s3", "local"]),
+  /** db (Postgres table, default on Railway) | s3 (Railway bucket or any S3-compatible store) | supabase | local */
+  STORAGE_DRIVER: z.enum(["db", "supabase", "s3", "local"]),
   SUPABASE_URL: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
@@ -48,7 +48,7 @@ function withDefaults(source: Record<string, string | undefined>): Record<string
     ...source,
     ...s3,
     APP_ORIGIN: appOrigin,
-    STORAGE_DRIVER: source["STORAGE_DRIVER"] || (s3["S3_BUCKET"] ? "s3" : source["SUPABASE_URL"] ? "supabase" : "local"),
+    STORAGE_DRIVER: source["STORAGE_DRIVER"] || (s3["S3_BUCKET"] ? "s3" : source["SUPABASE_URL"] ? "supabase" : source["RAILWAY_ENVIRONMENT"] ? "db" : "local"),
     LOCAL_STORAGE_PUBLIC_URL: source["LOCAL_STORAGE_PUBLIC_URL"] || `${appOrigin}/storage`,
     WORKER_PORT: source["WORKER_PORT"] || source["PORT"] || "8080",
   };
@@ -60,14 +60,14 @@ export function configProblems(source: Record<string, string | undefined> = proc
   const problems: string[] = [];
   if (!raw["DATABASE_URL"]) problems.push("DATABASE_URL");
   const production = source["NODE_ENV"] === "production" || !!source["RAILWAY_ENVIRONMENT"];
-  if (production && !source["APP_ORIGIN"]) problems.push("APP_ORIGIN (webbappens publika adress, t.ex. https://${{web.RAILWAY_PUBLIC_DOMAIN}})");
+  if (production && !source["APP_ORIGIN"]) problems.push("APP_ORIGIN (webbappens publika adress, t.ex. https://redesignweb-production.up.railway.app)");
   if (raw["STORAGE_DRIVER"] === "s3") {
     for (const k of ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]) if (!raw[k]) problems.push(k);
   }
   if (raw["STORAGE_DRIVER"] === "supabase") {
     for (const k of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) if (!raw[k]) problems.push(k);
   }
-  if (production && raw["STORAGE_DRIVER"] === "local") problems.push("STORAGE_DRIVER (local fungerar inte med separata tjänster, använd s3)");
+  if (source["RAILWAY_ENVIRONMENT"] && raw["STORAGE_DRIVER"] === "local") problems.push("STORAGE_DRIVER (local fungerar inte med separata tjänster, ta bort variabeln eller använd db/s3)");
   if ((raw["AI_PROVIDER"] ?? "anthropic") === "anthropic" && !raw["ANTHROPIC_API_KEY"]) problems.push("ANTHROPIC_API_KEY");
   return problems;
 }

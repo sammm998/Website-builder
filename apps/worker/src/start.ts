@@ -10,8 +10,8 @@ if (url && process.env["SKIP_MIGRATIONS"] !== "1") {
   try {
     await migrate(url, { log: (m) => console.log(`[migrate] ${m}`) });
   } catch (error) {
+    // Keep running: the worker reports problems itself and the next deploy retries the migration.
     console.error("[migrate] failed:", error);
-    process.exit(1);
   }
 }
 await main();

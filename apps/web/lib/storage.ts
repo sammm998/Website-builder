@@ -3,12 +3,13 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
 import { createClient } from "@supabase/supabase-js";
+import { sql } from "./db";
 import { env, type Env } from "./env";
 
 export type Bucket = "site-media" | "screens";
 
-/** Local and S3 objects are served by this app (/storage/site-media); Supabase serves its public bucket. */
-const servedByApp = (e: Env) => e.STORAGE_DRIVER === "local" || e.STORAGE_DRIVER === "s3";
+/** Objects are served by this app (/storage/site-media) except with Supabase, which serves its public bucket. */
+const servedByApp = (e: Env) => e.STORAGE_DRIVER !== "supabase";
 
 export function publicMediaUrl(path: string): string {
   const e = env();
@@ -41,12 +42,18 @@ export async function readObject(bucket: Bucket, path: string): Promise<Buffer |
     if (!file.startsWith(`${root}/`)) return null;
     return readFile(file).catch(() => null);
   }
+  const fromDb = async () => {
+    const [row] = await sql()<{ body: Buffer }[]>`select body from stored_objects where bucket = ${bucket} and path = ${path}`;
+    return row?.body ?? null;
+  };
+  if (e.STORAGE_DRIVER === "db") return fromDb();
   if (e.STORAGE_DRIVER === "s3") {
     try {
       const res = await s3Client(e).send(new GetObjectCommand({ Bucket: e.S3_BUCKET!, Key: `${bucket}/${path}` }));
       return res.Body ? Buffer.from(await res.Body.transformToByteArray()) : null;
     } catch (error) {
-      if (error instanceof NoSuchKey || (error as { name?: string }).name === "NoSuchKey") return null;
+      // Objects stored in Postgres before a bucket was added keep working.
+      if (error instanceof NoSuchKey || (error as { name?: string }).name === "NoSuchKey") return fromDb();
       throw error;
     }
   }

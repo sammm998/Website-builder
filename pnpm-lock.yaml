@@ -56,6 +56,9 @@ importers:
       '@redesign/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts
+      '@redesign/migrate':
+        specifier: workspace:*
+        version: link:../../packages/migrate
       '@redesign/motion-runtime':
         specifier: workspace:*
         version: link:../../packages/motion-runtime
@@ -107,6 +110,9 @@ importers:
       three:
         specifier: 0.186.1
         version: 0.186.1
+      tsx:
+        specifier: ^4.20.6
+        version: 4.23.15
       zod:
         specifier: ^4.1.12
         version: 4.6.6
@@ -129,9 +135,6 @@ importers:
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
-      tsx:
-        specifier: ^4.20.6
-        version: 4.23.15
 
   apps/worker:
     dependencies:

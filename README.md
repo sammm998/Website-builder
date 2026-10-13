@@ -95,11 +95,11 @@ Testerna omfattar bland annat:
 
 **Railway (rekommenderat, allt på ett ställe):**
 
-- Web, worker, Postgres och en Storage Bucket.
+- Web, worker och Postgres. Bilder sparas i Postgres som standard, och en Storage Bucket kan läggas till.
 - Egen inloggning med e-post/lösenord och Google.
-- Migrationer körs automatiskt vid deploy.
+- Migrationer körs automatiskt när tjänsterna startar.
 
-Steg för steg med exakta variabler finns i **[docs/railway.md](docs/railway.md)**. Hälsokontroll: `GET /api/health`.
+Snabbstarten kräver en databas och fem variabler, se **[docs/railway.md](docs/railway.md)**. Hälsokontroll: `GET /api/health`. Saknas konfiguration väntar workern och listar vad som saknas, i stället för att krascha.
 
 **Alternativ med Supabase:**
 

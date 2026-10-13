@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { appOrigin } from "./hosts";
 
 const schema = z.object({
@@ -9,8 +10,8 @@ const schema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().optional(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
-  /** supabase | s3 (Railway bucket, any S3-compatible store) | local */
-  STORAGE_DRIVER: z.enum(["supabase", "s3", "local"]),
+  /** db (Postgres table, default on Railway) | s3 (Railway bucket, any S3-compatible store) | supabase | local */
+  STORAGE_DRIVER: z.enum(["db", "supabase", "s3", "local"]),
   LOCAL_STORAGE_DIR: z.string().default("./.storage"),
   S3_ENDPOINT: z.string().optional(),
   S3_BUCKET: z.string().optional(),
@@ -21,8 +22,8 @@ const schema = z.object({
   APP_ORIGIN: z.string(),
   /** Published sites live at <slug>.<SITES_DOMAIN> when set, otherwise at /site/<slug>. */
   SITES_DOMAIN: z.string().default(""),
-  /** HMAC secret for session cookies (password and dev drivers). */
-  SESSION_SECRET: z.string().default("dev-only-secret-change-me-dev-only-secret"),
+  /** HMAC secret for session cookies (password and dev drivers). Derived from DATABASE_URL when unset. */
+  SESSION_SECRET: z.string(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   ALLOW_DEV_AUTH: z.string().optional(),
@@ -49,6 +50,14 @@ function s3Vars(source: Record<string, string | undefined>): Record<string, stri
   return Object.fromEntries(Object.entries(S3_ALIASES).map(([k, alts]) => [k, [k, ...alts].map((a) => source[a]?.trim()).find(Boolean)]));
 }
 
+/**
+ * Without SESSION_SECRET the cookie key is derived from DATABASE_URL: secret as long as the database password
+ * is, and stable across deploys. Setting SESSION_SECRET explicitly is still recommended.
+ */
+function derivedSecret(databaseUrl: string | undefined): string {
+  return createHash("sha256").update(`rd-session:${databaseUrl ?? "dev-only"}`).digest("base64url");
+}
+
 /** Raw env with smart defaults (Supabase if configured, else own auth; storage by what is set). */
 function withDefaults(source: Record<string, string | undefined>): Record<string, string | undefined> {
   const supabase = !!source["NEXT_PUBLIC_SUPABASE_URL"];
@@ -58,7 +67,8 @@ function withDefaults(source: Record<string, string | undefined>): Record<string
     ...s3,
     APP_ORIGIN: appOrigin(source),
     AUTH_DRIVER: source["AUTH_DRIVER"] || (supabase ? "supabase" : "password"),
-    STORAGE_DRIVER: source["STORAGE_DRIVER"] || (s3["S3_BUCKET"] ? "s3" : supabase ? "supabase" : "local"),
+    STORAGE_DRIVER: source["STORAGE_DRIVER"] || (s3["S3_BUCKET"] ? "s3" : supabase ? "supabase" : source["RAILWAY_ENVIRONMENT"] ? "db" : "local"),
+    SESSION_SECRET: source["SESSION_SECRET"] || derivedSecret(source["DATABASE_URL"]),
   };
 }
 
@@ -70,17 +80,26 @@ export function configProblems(source: Record<string, string | undefined> = proc
   if (raw.AUTH_DRIVER === "supabase") {
     for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]) if (!raw[k]) problems.push(k);
   }
-  if (raw.AUTH_DRIVER === "password" || raw.AUTH_DRIVER === "dev") {
-    if (source["NODE_ENV"] === "production" && (!raw["SESSION_SECRET"] || raw["SESSION_SECRET"].length < 32)) problems.push("SESSION_SECRET (min 32 tecken)");
-  }
+  if (source["SESSION_SECRET"] && source["SESSION_SECRET"].length < 32 && source["NODE_ENV"] === "production") problems.push("SESSION_SECRET (min 32 tecken)");
   if (raw.AUTH_DRIVER === "dev" && source["NODE_ENV"] === "production" && raw["ALLOW_DEV_AUTH"] !== "1") problems.push("AUTH_DRIVER=dev är inte tillåtet i produktion");
   if (raw.STORAGE_DRIVER === "s3") {
     for (const k of ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]) if (!raw[k]) problems.push(k);
   }
   if (raw.STORAGE_DRIVER === "supabase" && !raw["SUPABASE_SERVICE_ROLE_KEY"]) problems.push("SUPABASE_SERVICE_ROLE_KEY");
   // On Railway web and worker are separate containers: local files would not be shared.
-  if (raw.STORAGE_DRIVER === "local" && source["RAILWAY_ENVIRONMENT"]) problems.push("S3_BUCKET (Railway Bucket, se docs/railway.md)");
+  if (raw.STORAGE_DRIVER === "local" && source["RAILWAY_ENVIRONMENT"]) problems.push("STORAGE_DRIVER (local fungerar inte på Railway, ta bort variabeln)");
   return problems;
+}
+
+/** Effective auth and storage drivers after defaults (for diagnostics). */
+export function resolvedDrivers(source: Record<string, string | undefined> = process.env) {
+  const raw = withDefaults(source);
+  return { auth: raw["AUTH_DRIVER"], storage: raw["STORAGE_DRIVER"] };
+}
+
+/** Optional but advisable settings that are not set (names only). */
+export function configRecommendations(source: Record<string, string | undefined> = process.env): string[] {
+  return source["NODE_ENV"] === "production" && !source["SESSION_SECRET"] ? ["SESSION_SECRET"] : [];
 }
 
 let cached: Env | null = null;

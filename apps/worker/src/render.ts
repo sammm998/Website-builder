@@ -7,7 +7,7 @@ import { runtimeDir } from "@redesign/motion-runtime";
 import { buildSiteCss, renderPage, type MediaAsset, type SiteContext, type SitePageRef } from "@redesign/renderer";
 import type { Sql } from "./db";
 import type { Env } from "./env";
-import { createStorage, storagePublicBase, type Bucket, type Storage } from "./storage";
+import { storageFor, storagePublicBase, type Bucket, type Storage } from "./storage";
 
 /** Fake origin for runtime/fonts inside worker screenshots; fulfilled from local files. */
 export const ASSET_HOST = "https://assets.redesign.internal";
@@ -80,12 +80,6 @@ export async function renderDocument(
 
 const fontFileMap = allFontSources();
 
-const storageCache = new WeakMap<Env, Storage>();
-function storageFor(env: Env): Storage {
-  let storage = storageCache.get(env);
-  if (!storage) storageCache.set(env, (storage = createStorage(env)));
-  return storage;
-}
 
 /**
  * Browser context that serves the runtime and fonts from local files and the local storage driver
@@ -110,7 +104,7 @@ export async function renderContext(browser: Browser, env: Env, opts: { width: n
     }
     return route.fulfill({ status: 404, body: "" });
   });
-  if (env.STORAGE_DRIVER === "local" || env.STORAGE_DRIVER === "s3") {
+  if (env.STORAGE_DRIVER !== "supabase") {
     // Media URLs point at the web app; read the objects directly so screenshots don't depend on it.
     const prefix = storagePublicBase(env);
     const storage = storageFor(env);

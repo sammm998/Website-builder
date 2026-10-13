@@ -112,7 +112,7 @@ do $$
 declare r text; t text;
 begin
   foreach r in array array['anon', 'authenticated'] loop
-    foreach t in array array['user_credentials', 'oauth_identities', 'login_attempts'] loop
+    foreach t in array array['user_credentials', 'oauth_identities', 'login_attempts', 'stored_objects'] loop
       execute format('set local role %I', r);
       perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
       begin
@@ -125,6 +125,7 @@ begin
   end loop;
 end $$;
 select pg_temp.expect((select relrowsecurity from pg_class where oid = 'public.user_credentials'::regclass), 'credentials have RLS enabled');
+select pg_temp.expect((select relrowsecurity from pg_class where oid = 'public.stored_objects'::regclass), 'stored objects have RLS enabled');
 do $$ begin
   begin
     insert into auth.users (email) values ('A@example.com');

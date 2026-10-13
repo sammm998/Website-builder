@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { createClient } from "@supabase/supabase-js";
+import type { Sql } from "./db";
 import type { Env } from "./env";
 
 export type Bucket = "site-media" | "screens";
@@ -92,15 +93,80 @@ export function s3Client(env: Pick<Env, "S3_ENDPOINT" | "S3_REGION" | "S3_ACCESS
   });
 }
 
-export function createStorage(env: Env): Storage {
+/**
+ * Objects in Postgres (public.stored_objects). Needs nothing but the database, which makes it the default
+ * on Railway; site media is served by the web app under /storage/site-media.
+ */
+class DbStorage implements Storage {
+  constructor(
+    private sql: Sql,
+    private publicBase: string,
+  ) {}
+  async put(bucket: Bucket, path: string, body: Buffer, contentType: string) {
+    s3Key(bucket, path);
+    await this.sql`
+      insert into stored_objects (bucket, path, content_type, body) values (${bucket}, ${path}, ${contentType}, ${body})
+      on conflict (bucket, path) do update set content_type = excluded.content_type, body = excluded.body, created_at = now()`;
+  }
+  async get(bucket: Bucket, path: string) {
+    const [row] = await this.sql<{ body: Buffer }[]>`select body from stored_objects where bucket = ${bucket} and path = ${path}`;
+    if (!row) throw new Error(`Storage object not found: ${bucket}/${path}`);
+    return row.body;
+  }
+  publicUrl(bucket: Bucket, path: string) {
+    return `${this.publicBase}/${bucket}/${path}`;
+  }
+}
+
+/** Writes go to the bucket; reads fall back to Postgres for objects stored before a bucket was added. */
+class WithDbFallback implements Storage {
+  constructor(
+    private primary: Storage,
+    private fallback: DbStorage,
+  ) {}
+  put(bucket: Bucket, path: string, body: Buffer, contentType: string) {
+    return this.primary.put(bucket, path, body, contentType);
+  }
+  async get(bucket: Bucket, path: string) {
+    try {
+      return await this.primary.get(bucket, path);
+    } catch (error) {
+      return this.fallback.get(bucket, path).catch(() => Promise.reject(error));
+    }
+  }
+  publicUrl(bucket: Bucket, path: string) {
+    return this.primary.publicUrl(bucket, path);
+  }
+}
+
+export function createStorage(env: Env, sql?: Sql): Storage {
+  if (env.STORAGE_DRIVER === "db") {
+    if (!sql) throw new Error("The db storage driver needs a database connection");
+    return new DbStorage(sql, storagePublicBase(env));
+  }
   if (env.STORAGE_DRIVER === "local") return new LocalStorage(resolve(process.cwd(), env.LOCAL_STORAGE_DIR), env.LOCAL_STORAGE_PUBLIC_URL);
-  if (env.STORAGE_DRIVER === "s3") return new S3Storage(s3Client(env), env.S3_BUCKET!, storagePublicBase(env));
+  if (env.STORAGE_DRIVER === "s3") {
+    const s3 = new S3Storage(s3Client(env), env.S3_BUCKET!, storagePublicBase(env));
+    return sql ? new WithDbFallback(s3, new DbStorage(sql, storagePublicBase(env))) : s3;
+  }
   return new SupabaseStorage(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!);
+}
+
+/** Storage bound to an env by createServices, so browser contexts can read objects without the web app. */
+const bound = new WeakMap<Env, Storage>();
+export function bindStorage(env: Env, storage: Storage) {
+  bound.set(env, storage);
+}
+export function storageFor(env: Env): Storage {
+  let storage = bound.get(env);
+  if (!storage) bound.set(env, (storage = createStorage(env)));
+  return storage;
 }
 
 /** URL prefix under which the web app serves stored objects (local and s3 drivers). */
 export function storagePublicBase(env: Pick<Env, "STORAGE_DRIVER" | "LOCAL_STORAGE_PUBLIC_URL" | "APP_ORIGIN">): string {
+  // local: wherever LOCAL_STORAGE_PUBLIC_URL points; db and s3: the web app's /storage route.
   return (env.STORAGE_DRIVER === "local" ? env.LOCAL_STORAGE_PUBLIC_URL : `${env.APP_ORIGIN}/storage`).replace(/\/+$/, "");
 }
 
-export { LocalStorage, S3Storage };
+export { DbStorage, LocalStorage, S3Storage };
