@@ -78,6 +78,8 @@ const sv = {
   },
   dashboard: { title: "Projekt", new: "Nytt projekt", empty: "Inga projekt ännu. Börja med att klistra in en adress.", open: "Öppna", delete: "Ta bort", confirmDelete: "Ta bort projektet permanent?" },
   newProject: {
+    keyMissing: "Claude-nyckeln är inte inlagd än. Sidorna kan läsas in, men analys och design kräver nyckeln.",
+    keyMissingLink: "Lägg in nyckeln",
     title: "Nytt projekt",
     url: "Nuvarande webbplats",
     urlHint: "Vi läser upp till 50 sidor via sitemap och länkar.",
@@ -249,6 +251,8 @@ const en: Dict = {
   },
   dashboard: { title: "Projects", new: "New project", empty: "No projects yet. Start by pasting an address.", open: "Open", delete: "Delete", confirmDelete: "Delete this project permanently?" },
   newProject: {
+    keyMissing: "The Claude key has not been added yet. Pages can be read, but analysis and designs need the key.",
+    keyMissingLink: "Add the key",
     title: "New project",
     url: "Current website",
     urlHint: "We read up to 50 pages via sitemap and links.",
@@ -390,9 +394,13 @@ const ERRORS_SV: Record<string, string> = {
   "Password is too long.": "Lösenordet är för långt.",
   "Something went wrong. Please try again.": "Något gick fel. Försök igen.",
   // Job pause reasons (worker)
-  "ANTHROPIC_API_KEY is not configured.": "ANTHROPIC_API_KEY saknas på workern. Lägg in den i Railway och klicka Fortsätt.",
-  "The Anthropic API key is invalid.": "Anthropic-nyckeln är ogiltig. Byt ANTHROPIC_API_KEY på workern och klicka Fortsätt.",
+  "ANTHROPIC_API_KEY is not configured.": "Claude-nyckeln saknas. Lägg in din Anthropic-nyckel på inställningssidan och klicka sedan Fortsätt.",
+  "Only the administrator can change this.": "Bara administratören (det första kontot) kan ändra detta.",
+  "That does not look like an Anthropic API key (sk-ant-…).": "Det ser inte ut som en Anthropic-nyckel (sk-ant-…).",
+  "Anthropic did not accept the key. Check that it is copied completely.": "Anthropic godkände inte nyckeln. Kontrollera att hela nyckeln är kopierad.",
+  "The Anthropic API key is invalid.": "Anthropic-nyckeln är ogiltig. Lägg in en ny på inställningssidan och klicka Fortsätt.",
   "Claude is rate limited right now. Try again in a minute.": "Claude är tillfälligt överbelastat. Vänta en minut och klicka Fortsätt.",
+  "Could not reach Claude. Check the connection and try again.": "Kunde inte nå Claude. Klicka Fortsätt om en stund.",
   "Claude is temporarily unavailable.": "Claude är tillfälligt otillgängligt. Klicka Fortsätt om en stund.",
   "Claude returned invalid JSON.": "Claude gav ett ogiltigt svar. Klicka Fortsätt för att försöka igen.",
   "The response was cut off (max tokens).": "Svaret blev för långt och klipptes av. Klicka Fortsätt för att försöka igen.",

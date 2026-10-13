@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { headers } from "next/headers";
+import type postgres from "postgres";
 import { sql } from "./db";
 import { env } from "./env";
 import { hashPassword, passwordProblem, verifyPassword } from "./password";
@@ -66,6 +67,7 @@ export async function signUp(emailInput: string, password: string): Promise<{ id
     if (existing) throw new UserError("An account with this email already exists. Log in instead.");
     const [user] = await tx<{ id: string }[]>`insert into auth.users (email) values (${email}) returning id`;
     await tx`insert into user_credentials (user_id, password_hash) values (${user!.id}, ${hash})`;
+    await claimAdminIfNone(tx, user!.id);
     await tx`insert into login_attempts (key) values (${ipKey})`;
     return { id: user!.id, email };
   });
@@ -90,6 +92,19 @@ export async function upsertGoogleUser(identity: { subject: string; email: strin
         insert into auth.users (email, raw_user_meta_data) values (${email}, ${tx.json({ full_name: identity.name ?? "" })}) returning id, email`;
     }
     await tx`insert into oauth_identities (provider, subject, user_id, email) values ('google', ${identity.subject}, ${user!.id}, ${email})`;
+    await claimAdminIfNone(tx, user!.id);
     return user!;
   });
+}
+
+/**
+ * The first account of an installation becomes its administrator (manages installation settings such as
+ * the Claude key on the setup page). Serialised so two simultaneous sign-ups cannot both claim it.
+ */
+async function claimAdminIfNone(tx: postgres.TransactionSql, userId: string) {
+  await tx`select pg_advisory_xact_lock(72610111)`;
+  await tx`
+    insert into user_roles (user_id, role)
+    select ${userId}, 'admin' where not exists (select 1 from user_roles where role = 'admin')
+    on conflict do nothing`;
 }

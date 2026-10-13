@@ -1,39 +1,36 @@
 # Driftsättning på Railway
 
-## Snabbstart (3 steg, cirka 5 minuter)
+## Allt-i-ett (standard) – inget att ställa in
 
-Det här räcker för att allt ska fungera. Bilder sparas i Postgres och sessionsnyckeln härleds automatiskt. Bucket, Google och egen domän kan läggas till senare.
+Repots `Dockerfile` används automatiskt av Railway för båda tjänsterna. `scripts/launch.mjs` startar allt:
 
-**1. Lägg till en databas**
+- **Webbtjänsten** startar en egen Postgres, kör migrationerna och sedan appen. Workern körs inuti samma tjänst.
+- **Worker-tjänsten** gör ingenting i det här läget. Den svarar bara på hälsokontrollen och kan tas bort.
 
-I projektet: **+ Create → Database → PostgreSQL**. Låt den heta `Postgres`.
+Det enda du gör:
 
-**2. web-tjänsten** (`@redesign/web`): öppna **Variables → Raw Editor**, klistra in och spara:
+1. Öppna `https://<din-web-domän>/sv/setup`.
+2. Skapa ett konto. Det första kontot blir administratör.
+3. Klistra in din Anthropic-nyckel (console.anthropic.com → API Keys). Den kontrolleras och sparas krypterat i databasen.
+
+**Data:** utan volym nollställs den inbyggda databasen varje gång Railway deployar om. För att spara permanent: högerklicka på webbtjänsten → **Attach volume** → mount path `/data`. Launchern använder då volymen (`RAILWAY_VOLUME_MOUNT_PATH`) automatiskt.
+
+## Extern Postgres (valfritt)
+
+Lägg till Postgres i projektet och sätt variablerna på **web**:
 
 ```env
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 ```
 
-**3. worker-tjänsten** (`@redesign/worker`): öppna **Variables → Raw Editor**, klistra in, byt nyckeln och spara:
+och på **worker**:
 
 ```env
 DATABASE_URL=${{Postgres.DATABASE_URL}}
-APP_ORIGIN=https://redesignweb-production.up.railway.app
-ANTHROPIC_API_KEY=sk-ant-DIN-NYCKEL
-RAILWAY_DOCKERFILE_PATH=apps/worker/Dockerfile
+APP_ORIGIN=https://<din-web-domän>
 ```
 
-- `APP_ORIGIN` är webbens adress. Byt den om din web-domän är en annan.
-- `RAILWAY_DOCKERFILE_PATH` gör att workern byggs med Playwright-imagen, som innehåller Chromium för crawl och skärmdumpar.
-
-Railway deployar om båda tjänsterna när variablerna sparas. Databastabellerna skapas automatiskt.
-
-**Kontrollera:** öppna `https://redesignweb-production.up.railway.app/sv/setup`. Sidan visar databas, variabler och worker med grönt eller rött, och uppdateras av sig själv. När allt är grönt kan du klistra in din adress på startsidan. Tekniskt: `/api/health` ska svara `"ok": true`.
-
-- Workerns logg ska visa `[worker] started (… storage db)`.
-- Saknas något skriver workern `[worker] waiting for configuration` och listar exakt vad som saknas. Den kraschar inte.
-
----
+Då kör webben bara appen och workern körs i sin egen tjänst. Claude-nyckeln läggs fortfarande in på `/sv/setup`. Om du i stället sätter `ANTHROPIC_API_KEY` på workern används den. Sätt `SESSION_SECRET` antingen på båda tjänsterna eller på ingen av dem, eftersom den sparade nyckeln krypteras med den.
 
 ## Fördjupning och tillval
 
@@ -58,7 +55,7 @@ Utan `SESSION_SECRET` härleds nyckeln från `DATABASE_URL`. Vill du ha en egen 
 
 ### Config-as-code (valfritt)
 
-Under **Settings → Config-as-code** kan du ange `/apps/web/railway.json` respektive `/apps/worker/railway.json`. Det ger hälsokontroller, migrering som pre-deploy och watch-paths. Det behövs inte för snabbstarten: webben kör migrationerna när den startar, och workern gör det också.
+Under **Settings → Config-as-code** kan du ange `/apps/web/railway.json` respektive `/apps/worker/railway.json`. Det ger hälsokontroller och watch-paths. Det behövs inte: Dockerfilen och launchern fungerar utan.
 
 ### Google-inloggning (valfritt)
 
@@ -104,6 +101,6 @@ Workerns loggar börjar med `[migrate] …` och sedan `[worker] started (…)`. 
 |---|---|
 | HTTP 500 på startsidan | Kör en gammal version. Deploya om. `/api/health` visar vad som saknas. |
 | Workern skriver `waiting for configuration` | Lägg in variablerna som listas, se snabbstarten. |
-| Crawl misslyckas med fel om Chromium/browser | `RAILWAY_DOCKERFILE_PATH=apps/worker/Dockerfile` saknas på workern. |
+| Setup-sidan säger "Railway har inte byggt appen med Dockerfilen" | Tjänsten har en låst builder. Välj Dockerfile under Settings → Build, eller ange `/apps/web/railway.json` som config-fil. |
 | Bilder saknas i förhandsvisningen | Med bucket måste `S3_*` vara satta på **både** web och worker. |
 | Google ger `redirect_uri_mismatch` | Redirect-URI:n i Google Console måste vara exakt `https://<domän>/auth/google/callback`. |

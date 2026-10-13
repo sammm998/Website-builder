@@ -10,6 +10,7 @@ import { env } from "@/lib/env";
 import { isLocale, localizeError, type Locale } from "@/lib/i18n";
 import * as repo from "@/lib/repo";
 import { addDomain, removeDomain, verifyDomain } from "@/lib/domains";
+import { saveAnthropicKey } from "@/lib/ai-key";
 import { signIn, signUp } from "@/lib/password-auth";
 import { clearSession, createSession } from "@/lib/session";
 import { supabaseServer } from "@/lib/supabase";
@@ -223,4 +224,14 @@ export async function removeDomainAction(domainId: string) {
 export async function requestOrigin() {
   const h = await headers();
   return `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
+}
+
+// --- Installation settings ------------------------------------------------------------------
+
+export async function saveAnthropicKeyAction(_prev: ActionResult, form: FormData): Promise<ActionResult> {
+  return run(async () => {
+    const result = await saveAnthropicKey((await user()).id, String(form.get("key") ?? ""));
+    revalidatePath("/[locale]/setup", "page");
+    return result;
+  });
 }

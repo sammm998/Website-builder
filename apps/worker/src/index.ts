@@ -2,7 +2,8 @@ import { createServer } from "node:http";
 import { hostname } from "node:os";
 import { setGlobalDispatcher, EnvHttpProxyAgent } from "undici";
 import { chromium, type Browser } from "playwright";
-import { AiError, AnthropicProvider, FakeProvider } from "@redesign/ai";
+import { AiError, FakeProvider } from "@redesign/ai";
+import { LazyAnthropicProvider } from "./ai";
 import { connect, type Sql } from "./db";
 import { ConfigError, loadEnv, type Env } from "./env";
 import { bindStorage, createStorage } from "./storage";
@@ -32,7 +33,7 @@ export function createServices(env: Env): Services & { close: () => Promise<void
     sql,
     env,
     storage,
-    ai: env.AI_PROVIDER === "fake" ? new FakeProvider() : new AnthropicProvider(),
+    ai: env.AI_PROVIDER === "fake" ? new FakeProvider() : new LazyAnthropicProvider(sql),
     browser: () => {
       browser ??= chromium.launch({ executablePath: env.CHROMIUM_PATH, args: ["--disable-dev-shm-usage", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
       return browser;
@@ -108,7 +109,8 @@ export async function main() {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
   console.log(`[worker] started (concurrency ${env.WORKER_CONCURRENCY}, ai ${env.AI_PROVIDER}, storage ${env.STORAGE_DRIVER})`);
-  const beat = startHeartbeat(services.sql, "running", []);
+  const aiReady = async () => (services.ai instanceof LazyAnthropicProvider ? !!(await services.ai.apiKey()) : true);
+  const beat = startHeartbeat(services.sql, "running", [], aiReady);
   await runLoop(services, { concurrency: env.WORKER_CONCURRENCY, signal: controller.signal });
   clearInterval(beat);
   await services.close();
@@ -122,12 +124,17 @@ function healthServer(port: number, body: () => object) {
 }
 
 /** Tells the web app (setup page, wizard) that this worker is alive and whether it is waiting for configuration. */
-function startHeartbeat(sql: Sql, state: "running" | "waiting", missing: string[]) {
+function startHeartbeat(sql: Sql, state: "running" | "waiting", missing: string[], aiReady: () => Promise<boolean> = async () => false) {
   const id = process.env["RAILWAY_REPLICA_ID"] || hostname();
   const write = () =>
-    void sql`
-      insert into worker_status (id, state, missing, seen_at) values (${id}, ${state}, ${missing}, now())
-      on conflict (id) do update set state = excluded.state, missing = excluded.missing, seen_at = now()`.catch(() => {});
+    void aiReady()
+      .catch(() => false)
+      .then(
+        (ready) => sql`
+          insert into worker_status (id, state, missing, ai_ready, seen_at) values (${id}, ${state}, ${missing}, ${ready}, now())
+          on conflict (id) do update set state = excluded.state, missing = excluded.missing, ai_ready = excluded.ai_ready, seen_at = now()`,
+      )
+      .catch(() => {});
   write();
   return setInterval(write, 30_000);
 }

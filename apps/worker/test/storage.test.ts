@@ -44,7 +44,6 @@ describe("worker env", () => {
       "S3_BUCKET",
       "S3_ACCESS_KEY_ID",
       "S3_SECRET_ACCESS_KEY",
-      "ANTHROPIC_API_KEY",
     ]);
   });
 

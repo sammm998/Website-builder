@@ -69,6 +69,7 @@ export class AnthropicProvider implements AiProvider {
       if (error instanceof Anthropic.AuthenticationError) throw new AiError("The Anthropic API key is invalid.", "config");
       if (error instanceof Anthropic.BadRequestError) throw new AiError(`Claude rejected the request: ${error.message}`, "api");
       if (error instanceof Anthropic.InternalServerError) throw new AiError("Claude is temporarily unavailable.", "overloaded");
+      if (error instanceof Anthropic.APIConnectionError) throw new AiError("Could not reach Claude. Check the connection and try again.", "api");
       if (error instanceof Anthropic.APIError) throw new AiError(`Claude API error ${error.status}: ${error.message}`, "api");
       throw new AiError(`Claude request failed: ${(error as Error).message}`, "api");
     }

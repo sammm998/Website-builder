@@ -38,6 +38,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: 0.133.0
+        version: 0.133.0(zod@4.6.6)
       '@aws-sdk/client-s3':
         specifier: 3.1149.0
         version: 3.1149.0
@@ -53,6 +56,9 @@ importers:
       '@react-three/fiber':
         specifier: 9.8.1
         version: 9.8.1(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(three@0.186.1)
+      '@redesign/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@redesign/fonts':
         specifier: workspace:*
         version: link:../../packages/fonts

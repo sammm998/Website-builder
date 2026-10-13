@@ -68,7 +68,7 @@ export function configProblems(source: Record<string, string | undefined> = proc
     for (const k of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) if (!raw[k]) problems.push(k);
   }
   if (source["RAILWAY_ENVIRONMENT"] && raw["STORAGE_DRIVER"] === "local") problems.push("STORAGE_DRIVER (local fungerar inte med separata tjänster, ta bort variabeln eller använd db/s3)");
-  if ((raw["AI_PROVIDER"] ?? "anthropic") === "anthropic" && !raw["ANTHROPIC_API_KEY"]) problems.push("ANTHROPIC_API_KEY");
+  // ANTHROPIC_API_KEY is optional here: the owner can enter the key in the app (setup page) instead.
   return problems;
 }
 

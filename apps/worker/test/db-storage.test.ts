@@ -51,7 +51,30 @@ describe("worker without configuration", () => {
       body = await fetch(`http://127.0.0.1:${port}/health`).then((r) => r.json()).catch(() => null);
     }
     expect(child.exitCode).toBeNull();
-    expect(body).toMatchObject({ ok: false, missing: expect.arrayContaining(["DATABASE_URL", "ANTHROPIC_API_KEY"]) });
+    expect(body).toMatchObject({ ok: false, missing: expect.arrayContaining(["DATABASE_URL"]) });
     expect(log).toContain("waiting for configuration");
   }, 30_000);
+});
+
+describe("Claude key entered in the app", () => {
+  it("is read from app_settings (encrypted) when the environment has none", async () => {
+    const { LazyAnthropicProvider } = await import("../src/ai");
+    const { ANTHROPIC_KEY_SETTING, encryptSetting } = await import("@redesign/ai/secrets");
+    const sql = connect(db.url);
+    const saved = { key: process.env["ANTHROPIC_API_KEY"], secret: process.env["SESSION_SECRET"] };
+    delete process.env["ANTHROPIC_API_KEY"];
+    process.env["SESSION_SECRET"] = "t".repeat(40);
+    try {
+      const provider = new LazyAnthropicProvider(sql);
+      expect(await provider.apiKey()).toBeNull();
+      await expect(provider.generateObject({} as never)).rejects.toThrow("ANTHROPIC_API_KEY is not configured.");
+      await sql`insert into app_settings (key, value) values (${ANTHROPIC_KEY_SETTING}, ${encryptSetting("sk-ant-test-key")})`;
+      expect(await provider.apiKey()).toBe("sk-ant-test-key");
+    } finally {
+      if (saved.key) process.env["ANTHROPIC_API_KEY"] = saved.key;
+      if (saved.secret) process.env["SESSION_SECRET"] = saved.secret;
+      else delete process.env["SESSION_SECRET"];
+      await sql.end();
+    }
+  });
 });

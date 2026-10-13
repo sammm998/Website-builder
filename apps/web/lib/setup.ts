@@ -10,8 +10,16 @@ export interface WorkerHeartbeat {
   id: string;
   state: "running" | "waiting";
   missing: string[];
+  ai_ready: boolean;
   seen_at: string;
   fresh: boolean;
+}
+
+/** How the database is provided: by the platform (DATABASE_URL) or by the all-in-one launcher. */
+export type DbMode = "external" | "embedded-volume" | "embedded-ephemeral" | "unavailable";
+export function dbMode(): DbMode {
+  const mode = process.env["REDESIGN_DB_MODE"];
+  return mode === "embedded-volume" || mode === "embedded-ephemeral" || mode === "unavailable" ? mode : "external";
 }
 
 export interface SetupStatus {
@@ -55,9 +63,11 @@ export async function setupStatus(): Promise<SetupStatus> {
         migrations = "missing";
       }
       if (row?.workers) {
+        // Caught on its own: an older schema (before ai_ready) must not make the database look unreachable.
         workers = await db<WorkerHeartbeat[]>`
-          select id, state, missing, seen_at::text, seen_at > now() - make_interval(secs => ${WORKER_STALE_SECONDS}) as fresh
-          from public.worker_status where seen_at > now() - interval '1 day' order by seen_at desc limit 5`;
+          select id, state, missing, coalesce(ai_ready, false) as ai_ready, seen_at::text,
+            seen_at > now() - make_interval(secs => ${WORKER_STALE_SECONDS}) as fresh
+          from public.worker_status where seen_at > now() - interval '1 day' order by seen_at desc limit 5`.catch(() => []);
       }
     } catch (error) {
       database = "unreachable";

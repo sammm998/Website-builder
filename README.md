@@ -93,13 +93,13 @@ Testerna omfattar bland annat:
 
 ## Driftsättning
 
-**Railway (rekommenderat, allt på ett ställe):**
+**Railway (rekommenderat): allt-i-ett utan inställningar.**
 
-- Web, worker och Postgres. Bilder sparas i Postgres som standard, och en Storage Bucket kan läggas till.
-- Egen inloggning med e-post/lösenord och Google.
-- Migrationer körs automatiskt när tjänsterna startar.
+- Railway bygger repots `Dockerfile`, som innehåller Chromium och Postgres. `scripts/launch.mjs` startar en inbyggd databas, migrationerna, webben och workern i webbtjänsten.
+- Du öppnar `/sv/setup`, skapar konto (det första kontot blir administratör) och klistrar in Anthropic-nyckeln. Den sparas krypterat.
+- Utan volym nollställs datan vid omdeploy. Koppla en volym på `/data` för att spara permanent, eller använd en extern Postgres.
 
-Snabbstarten kräver en databas och fem variabler, se **[docs/railway.md](docs/railway.md)**. Hälsokontroll: `GET /api/health`. Saknas konfiguration väntar workern och listar vad som saknas, i stället för att krascha.
+Mer i **[docs/railway.md](docs/railway.md)**.
 
 **Alternativ med Supabase:**
 

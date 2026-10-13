@@ -7,3 +7,7 @@
 **/playwright-report
 .git
 .localdb
+**/.env
+**/.env.local
+**/.env.*.local
+.data
