@@ -26,6 +26,12 @@ export async function runCrawl(ctx: JobContext) {
   const limit = Math.min(Number(ctx.job.input["limit"] ?? 50), 50);
 
   let state = (ctx.job.progress["state"] as CrawlState | undefined) ?? (await initCrawl(project.source_url, { ...guard, limit }));
+  // The start URL may have redirected (e.g. to www. or https); keep the project's origin in sync.
+  const origin = new URL(state.start).origin;
+  if (origin !== project.origin) {
+    await sql`update projects set origin = ${origin} where id = ${ctx.projectId}`;
+    project.origin = origin;
+  }
   await ctx.progress({ state, processed: state.processed, discovered: state.seen.length, phase: "crawling" });
   await sql`update projects set status = 'crawling' where id = ${ctx.projectId}`;
 
@@ -44,8 +50,22 @@ export async function runCrawl(ctx: JobContext) {
   }
 
   // Brand + language from the homepage; SEO audit across all pages.
-  const pages = await sql<{ url: string; path: string; status_code: number | null; source: SourcePage | null }[]>`
-    select url, path, status_code, source from pages where project_id = ${ctx.projectId} order by path`;
+  const pages = await sql<{ url: string; path: string; status_code: number | null; source: SourcePage | null; error: string | null }[]>`
+    select url, path, status_code, source, error from pages where project_id = ${ctx.projectId} order by path`;
+  if (!pages.some((p) => p.source)) {
+    // Pauses the job with a readable reason instead of an empty page list.
+    // First line only, without Playwright's call log ("page.goto: net::ERR_NAME_NOT_RESOLVED at …").
+    const first = pages
+      .find((p) => p.error)
+      ?.error?.split("\n")[0]
+      ?.replace(/^page\.goto:\s*/, "")
+      .replace(/\s+at\s+https?:\/\/\S+$/, "")
+      .trim();
+    throw new Error(
+      `Kunde inte läsa någon sida från ${new URL(project.origin).hostname}${first ? ` (${first})` : ""}. ` +
+        "Kontrollera adressen. Om sajten blockerar automatiska besök eller kräver inloggning går den inte att läsa in.",
+    );
+  }
   const home = pages.find((p) => p.path === "/")?.source ?? pages.find((p) => p.source)?.source ?? null;
   const languages = [...new Set(pages.map((p) => p.source?.lang?.slice(0, 2).toLowerCase()).filter((l): l is string => !!l))];
   const robotsTxt = await safeFetch(`${project.origin}/robots.txt`, { ...guard, maxBytes: 200_000 }).then((r) => r.status < 400, () => false);

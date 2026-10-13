@@ -1,6 +1,6 @@
 import type { BrowserContext } from "playwright";
 import type { MediaRef, SourcePage } from "@redesign/schema";
-import { assertPublicUrl, type GuardOptions } from "./ssrf";
+import { assertPublicUrl, safeFetch, type GuardOptions } from "./ssrf";
 import { fetchRobots, fetchSitemapUrls, normalizePageUrl, pathOf, robotsAllows, type RobotsRules } from "./discovery";
 import { extractRaw, fullPageScreenshot, openPage } from "./browser";
 import { toSourcePage } from "./extract";
@@ -41,7 +41,8 @@ export async function initCrawl(
   startUrl: string,
   opts: GuardOptions & { limit?: number; maxDepth?: number } = {},
 ): Promise<CrawlState> {
-  const start = await assertPublicUrl(startUrl, opts);
+  // Follow redirects first (dinsajt.se -> https://www.dinsajt.se/sv/) so the crawl uses the site's real origin.
+  const start = await assertPublicUrl(await resolveStartUrl(startUrl, opts), opts);
   const normalized = normalizePageUrl(start.href, start) ?? `${start.origin}/`;
   const robots = await fetchRobots(start.origin, opts);
   const sitemapUrls = await fetchSitemapUrls(
@@ -72,6 +73,16 @@ export async function initCrawl(
     robots: { allow: robots.allow, disallow: robots.disallow },
     sitemapCount: sitemapUrls.length,
   };
+}
+
+/** Final URL after redirects (each hop SSRF-checked); the input itself when the site refuses plain requests. */
+export async function resolveStartUrl(startUrl: string, opts: GuardOptions = {}): Promise<string> {
+  try {
+    const res = await safeFetch(startUrl, { ...opts, maxBytes: 2_000_000, timeoutMs: 15_000 });
+    return res.url || startUrl;
+  } catch {
+    return startUrl;
+  }
 }
 
 export function crawlFinished(state: CrawlState): boolean {

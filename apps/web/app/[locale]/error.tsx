@@ -17,7 +17,7 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
           <button type="button" onClick={reset} className="rounded-full bg-ink px-5 py-2.5 text-chalk">
             {sv ? "Försök igen" : "Try again"}
           </button>
-          <a href="/api/health" className="rounded-full border border-ink/15 px-5 py-2.5">
+          <a href={`/${sv ? "sv" : "en"}/setup`} className="rounded-full border border-ink/15 px-5 py-2.5">
             {sv ? "Systemstatus" : "System status"}
           </a>
         </div>

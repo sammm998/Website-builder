@@ -48,7 +48,12 @@ const urlSchema = z
   .string()
   .trim()
   .transform((v) => (/^https?:\/\//i.test(v) ? v : `https://${v}`))
-  .pipe(z.string().url());
+  .pipe(
+    z
+      .string()
+      .url("Enter a valid web address, e.g. www.yoursite.com.")
+      .refine((v) => /^https?:$/.test(new URL(v).protocol) && new URL(v).hostname.includes("."), "Enter a valid web address, e.g. www.yoursite.com."),
+  );
 
 export const createProjectInput = z.object({
   url: urlSchema,
@@ -127,6 +132,8 @@ export interface WizardState {
   cost: number;
   /** Free site address suggestion (only when not yet published). */
   suggestedSlug: string;
+  /** Latest worker heartbeat: lets the wizard explain a job that is not being picked up. */
+  worker: { state: "running" | "waiting" | "none"; missing: string[] };
 }
 
 export function slugify(s: string): string {
@@ -162,7 +169,7 @@ export async function wizardState(userId: string, projectId: string): Promise<Wi
     select id, name, source_url, origin, status, step, pages_locked, source_language, target_languages, approved_direction_id, inspiration_urls
     from projects where id = ${projectId} and user_id = ${userId}`;
   if (!project) return null;
-  const [pages, jobs, analysisRows, directions, builds, sites, cost] = await Promise.all([
+  const [pages, jobs, analysisRows, directions, builds, sites, cost, workers] = await Promise.all([
     db<WizardState["pages"]>`select id, path, url, title, included, error, status_code from pages where project_id = ${projectId} and user_id = ${userId} order by (path = '/') desc, path`,
     db<JobInfo[]>`
       select distinct on (kind) id, kind, status, progress - 'state' as progress, error, cost_usd, created_at
@@ -176,6 +183,8 @@ export async function wizardState(userId: string, projectId: string): Promise<Wi
     db<{ id: string; slug: string; version: number; published_at: Date }[]>`
       select id, slug, version, published_at from published_sites where project_id = ${projectId} and user_id = ${userId} and is_published`,
     db<{ total: string | null }[]>`select sum(cost_usd)::text as total from ai_usage where project_id = ${projectId} and user_id = ${userId}`,
+    db<{ state: "running" | "waiting"; missing: string[] }[]>`
+      select state, missing from worker_status where seen_at > now() - interval '90 seconds' order by (state = 'running') desc, seen_at desc limit 1`,
   ]);
   const build = builds[0]
     ? {
@@ -198,6 +207,7 @@ export async function wizardState(userId: string, projectId: string): Promise<Wi
     site,
     domains,
     cost: Number(cost[0]?.total ?? 0),
+    worker: workers[0] ? { state: workers[0].state, missing: workers[0].missing } : { state: "none", missing: [] },
     suggestedSlug: site?.slug ?? (await freeSlug(slugify(project.name || new URL(project.source_url).hostname.replace(/^www\./, "")), projectId)),
   };
 }

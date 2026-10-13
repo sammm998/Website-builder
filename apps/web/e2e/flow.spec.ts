@@ -28,7 +28,7 @@ test("redesign journey", async ({ page }) => {
     await page.getByLabel("E-post").fill(email);
     await page.getByLabel("Lösenord").fill("fel-lösenord-123");
     await page.getByRole("button", { name: "Logga in" }).click();
-    await expect(page.getByText("Wrong email or password.")).toBeVisible();
+    await expect(page.getByText("Fel e-post eller lösenord.")).toBeVisible();
     await page.getByLabel("E-post").fill(email);
     await page.getByLabel("Lösenord").fill("e2e-lösenord-123");
   }

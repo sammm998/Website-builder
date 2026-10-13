@@ -94,6 +94,10 @@ const sv = {
     cancel: "Avbryt",
     paused: "Pausad",
     working: "Arbetar…",
+    workerDown: "Jobbet har inte startat – workern är inte igång.",
+    workerWaiting: "Workern väntar på variabler i Railway:",
+    workerNone: "Ingen worker har hört av sig. Kontrollera workern i Railway.",
+    openSetup: "Öppna inställningar",
     pages: {
       title: "Sidor",
       lead: "Välj vilka sidor som ska ingå i den nya webbplatsen.",
@@ -261,6 +265,10 @@ const en: Dict = {
     cancel: "Cancel",
     paused: "Paused",
     working: "Working…",
+    workerDown: "The job has not started – the worker is not running.",
+    workerWaiting: "The worker is waiting for Railway variables:",
+    workerNone: "No worker has reported in. Check the worker in Railway.",
+    openSetup: "Open setup",
     pages: {
       title: "Pages",
       lead: "Choose which pages belong in the new website.",
@@ -348,3 +356,56 @@ export const LANGUAGE_OPTIONS: { code: string; sv: string; en: string }[] = [
   { code: "fr", sv: "Franska", en: "French" },
   { code: "es", sv: "Spanska", en: "Spanish" },
 ];
+
+/** Swedish versions of server messages (server code throws English; the UI language decides). */
+const ERRORS_SV: Record<string, string> = {
+  "A direction is already approved.": "En designriktning är redan godkänd.",
+  "An account with this email already exists. Log in instead.": "Det finns redan ett konto med den e-postadressen. Logga in i stället.",
+  "Approve a design first.": "Godkänn en design först.",
+  "Build the website first.": "Bygg webbplatsen först.",
+  "Daily generation limit reached. Try again tomorrow.": "Dagens gräns för genereringar är nådd. Försök igen i morgon.",
+  "Describe what to change.": "Beskriv vad som ska ändras.",
+  "Direction not found.": "Designriktningen hittades inte.",
+  "Domain not found.": "Domänen hittades inte.",
+  "Nothing to approve.": "Det finns inget att godkänna.",
+  "Please log in again.": "Logga in igen.",
+  "Project not found.": "Projektet hittades inte.",
+  "Publish the website first.": "Publicera webbplatsen först.",
+  "Select at least one page.": "Välj minst en sida.",
+  "That address is taken.": "Adressen är upptagen.",
+  "That domain is already connected.": "Domänen är redan kopplad.",
+  "The analysis is approved and locked.": "Analysen är godkänd och låst.",
+  "The page list is locked.": "Sidlistan är låst.",
+  "This account uses Google. Continue with Google instead.": "Kontot använder Google. Fortsätt med Google i stället.",
+  "This job cannot be resumed.": "Jobbet kan inte återupptas.",
+  "This step is already running.": "Steget körs redan.",
+  "Too many attempts. Wait 15 minutes and try again.": "För många försök. Vänta 15 minuter och försök igen.",
+  "Too many new accounts from this network. Try again later.": "För många nya konton från det här nätverket. Försök igen senare.",
+  "Wait for the crawl to finish.": "Vänta tills sidorna har lästs in.",
+  "Wrong email or password.": "Fel e-post eller lösenord.",
+  "Enter a valid email address.": "Ange en giltig e-postadress.",
+  "Enter a valid web address, e.g. www.yoursite.com.": "Ange en giltig webbadress, t.ex. www.dinsajt.se.",
+  "That address cannot be reached from the internet.": "Adressen går inte att nå från internet.",
+  "Password must be at least 8 characters.": "Lösenordet måste vara minst 8 tecken.",
+  "Password is too long.": "Lösenordet är för långt.",
+  "Something went wrong. Please try again.": "Något gick fel. Försök igen.",
+  // Job pause reasons (worker)
+  "ANTHROPIC_API_KEY is not configured.": "ANTHROPIC_API_KEY saknas på workern. Lägg in den i Railway och klicka Fortsätt.",
+  "The Anthropic API key is invalid.": "Anthropic-nyckeln är ogiltig. Byt ANTHROPIC_API_KEY på workern och klicka Fortsätt.",
+  "Claude is rate limited right now. Try again in a minute.": "Claude är tillfälligt överbelastat. Vänta en minut och klicka Fortsätt.",
+  "Claude is temporarily unavailable.": "Claude är tillfälligt otillgängligt. Klicka Fortsätt om en stund.",
+  "Claude returned invalid JSON.": "Claude gav ett ogiltigt svar. Klicka Fortsätt för att försöka igen.",
+  "The response was cut off (max tokens).": "Svaret blev för långt och klipptes av. Klicka Fortsätt för att försöka igen.",
+  "Approve a design direction first.": "Godkänn en designriktning först.",
+  "Build the website before publishing.": "Bygg webbplatsen innan du publicerar.",
+  "Invalid site address.": "Ogiltig webbplatsadress.",
+  "No homepage content found.": "Hittade inget innehåll på startsidan.",
+  "No pages to build.": "Det finns inga sidor att bygga.",
+  "No pages with content to analyse.": "Det finns inga sidor med innehåll att analysera.",
+  "Run the analysis first.": "Kör analysen först.",
+  "That site address is already taken. Choose another one.": "Adressen är redan tagen. Välj en annan.",
+};
+
+export function localizeError(message: string, locale: Locale): string {
+  return locale === "sv" ? (ERRORS_SV[message] ?? message) : message;
+}

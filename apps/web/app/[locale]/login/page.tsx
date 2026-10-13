@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { currentUser } from "@/lib/auth";
+import { currentUser, requireConfigured } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { googleConfigured } from "@/lib/google-oauth";
 import { dict, isLocale } from "@/lib/i18n";
@@ -13,6 +13,7 @@ export default async function LoginPage({ params, searchParams }: { params: Prom
   const { locale: raw } = await params;
   const locale = isLocale(raw) ? raw : "sv";
   const { next, error } = await searchParams;
+  requireConfigured(locale);
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : `/${locale}/dashboard`;
   if (await currentUser()) redirect(safeNext);
   const t = dict(locale);

@@ -28,7 +28,7 @@ RAILWAY_DOCKERFILE_PATH=apps/worker/Dockerfile
 
 Railway deployar om båda tjänsterna när variablerna sparas. Databastabellerna skapas automatiskt.
 
-**Kontrollera:** öppna `https://redesignweb-production.up.railway.app/api/health`. Där ska det stå `"ok": true`.
+**Kontrollera:** öppna `https://redesignweb-production.up.railway.app/sv/setup`. Sidan visar databas, variabler och worker med grönt eller rött, och uppdateras av sig själv. När allt är grönt kan du klistra in din adress på startsidan. Tekniskt: `/api/health` ska svara `"ok": true`.
 
 - Workerns logg ska visa `[worker] started (… storage db)`.
 - Saknas något skriver workern `[worker] waiting for configuration` och listar exakt vad som saknas. Den kraschar inte.

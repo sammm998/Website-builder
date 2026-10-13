@@ -81,6 +81,6 @@ describe("migrate", () => {
     await sql.end();
     const r = await migrate(url);
     expect(r.baselined).toHaveLength(3);
-    expect(r.applied).toEqual(["20261011000003_password_auth.sql", "20261012000004_stored_objects.sql"]);
+    expect(r.applied).toEqual(["20261011000003_password_auth.sql", "20261012000004_stored_objects.sql", "20261013000005_worker_status.sql"]);
   }, 60_000);
 });

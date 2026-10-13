@@ -101,7 +101,7 @@ export function Wizard({ initial, locale, t }: { initial: WizardState; locale: L
             {error ? (
               <p className="text-sm text-ember" role="alert" onClick={() => setError(null)}>{error}</p>
             ) : (
-              <JobBanner job={stepJob ?? running} t={t} act={act} />
+              <JobBanner job={stepJob ?? running} t={t} act={act} worker={state.worker} locale={locale} />
             )}
             {step === 1 && !stepJob?.error && !running ? <p className="text-sm text-stone">{state.pages.length} {t.pages.discovered} · {included} ✓</p> : null}
           </div>
