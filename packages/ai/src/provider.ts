@@ -13,6 +13,12 @@ export interface ObjectRequest<T> {
   /** Telemetry/cost label, e.g. "direction", "page", "translate". */
   purpose: string;
   system: string;
+  /**
+   * Large input that is identical across a series of calls (design system, approved examples, shared
+   * source). Sent after the images and before `prompt` with a cache breakpoint, so repeated calls read it
+   * from the prompt cache at a fraction of the price.
+   */
+  context?: string;
   prompt: string;
   images?: ImageInput[];
   schema: z.ZodType<T>;

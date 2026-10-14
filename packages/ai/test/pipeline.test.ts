@@ -63,6 +63,25 @@ describe("pipeline with the deterministic provider", () => {
       expect(direction.footerHtml).toContain("Org.nr 556000-0000");
     }
     expect(usage).toEqual(expect.arrayContaining(["analysis", "briefs", "direction"]));
+    // The three directions share one cached context; only the brief differs.
+    const directionCalls = ai.calls.filter((x) => x.purpose === "direction");
+    expect(new Set(directionCalls.map((x) => x.context)).size).toBe(1);
+    expect(directionCalls.every((x) => x.effort === "high")).toBe(true);
+  });
+
+  it("builds a page in one call with the shared context cached and medium effort", async () => {
+    const analysis = await analyzeSite(deps, { pages: [sampleSourcePage], seoSummary: { score: 70, failing: [] }, screenshots: [], outputLanguage: "sv", origin: ORIGIN });
+    const briefs = await planDirections(deps, { ...ctx, analysis });
+    const { direction } = await generateDirection(deps, { ...ctx, analysis }, briefs[0]!, []);
+    const before = ai.calls.length;
+    await generatePage(deps, { direction, validation }, sampleSourcePage);
+    await generatePage(deps, { direction, validation }, { ...sampleSourcePage, path: "/om-oss" });
+    const pageCalls = ai.calls.slice(before).filter((x) => x.purpose === "page");
+    expect(pageCalls).toHaveLength(2); // one call per page (hero + all sections)
+    expect(pageCalls[0]!.context).toBe(pageCalls[1]!.context);
+    expect(pageCalls[0]!.context).toContain("Approved design system");
+    expect(pageCalls[0]!.prompt).not.toContain("Approved design system");
+    expect(pageCalls.every((x) => x.effort === "medium")).toBe(true);
   });
 
   it("generates full pages reusing existing sections and translates structure-preservingly", async () => {
@@ -131,5 +150,20 @@ describe("enforceContrast", () => {
     const fixed = enforceContrast(bad);
     const { designSystemContrastIssues } = await import("@redesign/schema");
     expect(designSystemContrastIssues(fixed)).toEqual([]);
+  });
+});
+
+describe("cost tracking", () => {
+  it("records usage of billed calls that fail (refusal, cut-off, invalid output)", async () => {
+    const { AiError } = await import("../src");
+    const failing: AiProvider = {
+      name: "failing",
+      async generateObject() {
+        throw new AiError("The response was cut off (max tokens).", "truncated", { provider: "x", model: "m", purpose: "page", inputTokens: 10, outputTokens: 20, costUsd: 0.5 });
+      },
+    };
+    const recorded: number[] = [];
+    await expect(analyzeSite({ ai: failing, onUsage: (u) => void recorded.push(u.costUsd) }, { pages: [sampleSourcePage], seoSummary: { score: 1, failing: [] }, screenshots: [], outputLanguage: "sv", origin: ORIGIN })).rejects.toThrow("cut off");
+    expect(recorded).toEqual([0.5]);
   });
 });

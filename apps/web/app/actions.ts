@@ -11,6 +11,7 @@ import { isLocale, localizeError, type Locale } from "@/lib/i18n";
 import * as repo from "@/lib/repo";
 import { addDomain, removeDomain, verifyDomain } from "@/lib/domains";
 import { saveAnthropicKey } from "@/lib/ai-key";
+import { createShare, type ShareKind } from "@/lib/shares";
 import { signIn, signUp } from "@/lib/password-auth";
 import { clearSession, createSession } from "@/lib/session";
 import { supabaseServer } from "@/lib/supabase";
@@ -233,5 +234,16 @@ export async function saveAnthropicKeyAction(_prev: ActionResult, form: FormData
     const result = await saveAnthropicKey((await user()).id, String(form.get("key") ?? ""));
     revalidatePath("/[locale]/setup", "page");
     return result;
+  });
+}
+
+// --- Test links -----------------------------------------------------------------------------
+
+/** Creates (or reuses) a 7-day test link for the owner's direction or build; returns its URL. */
+export async function createPreviewShareAction(kind: ShareKind, targetId: string): Promise<ActionResult> {
+  return run(async () => {
+    if (kind !== "direction" && kind !== "build") throw new repo.UserError("Preview not found.");
+    const { token } = await createShare((await user()).id, kind, targetId);
+    return `${env().APP_ORIGIN}/p/${token}`;
   });
 }

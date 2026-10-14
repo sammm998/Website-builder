@@ -119,6 +119,12 @@ describe("end-to-end job flow", () => {
       expect(r.checks.overflowMobile).toBeLessThanOrEqual(0);
     }
 
+    // Cost guard: one page call per page, and the paid visual critique only where needed (here: homepage).
+    const calls = Object.fromEntries(
+      (await sql<{ purpose: string; n: number }[]>`select purpose, count(*)::int as n from ai_usage where project_id = ${projectId} group by 1`).map((r) => [r.purpose, r.n]),
+    );
+    expect(calls["page"]).toBe(5);
+    expect(calls["critique"]).toBe(1);
     const publish = await runJob("publish", { slug: "byggfirma-ek" });
     expect(publish.error).toBeNull();
     const [site] = await sql<{ id: string; sitemap_xml: string; robots_txt: string; css: string; base_path: string }[]>`select id, sitemap_xml, robots_txt, css, base_path from published_sites where project_id = ${projectId}`;

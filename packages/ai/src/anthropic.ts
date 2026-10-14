@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { AiError, type AiProvider, type ObjectRequest, type ObjectResult, type Usage } from "./provider";
 import { toOutputSchema } from "./json-schema";
 
-/** USD per million tokens (input, output) for cost tracking; prompt caching ignored (upper bound). */
+/** USD per million tokens (input, output) for cost tracking; cache writes/reads are weighted in usageOf. */
 const PRICES: Record<string, [number, number]> = {
   "claude-opus-5-5": [4, 20],
   "claude-sonnet-5-5": [2, 10],
@@ -48,6 +48,8 @@ export class AnthropicProvider implements AiProvider {
       content.push({ type: "text", text: image.label });
       content.push({ type: "image", source: { type: "base64", media_type: image.mediaType, data: image.data.toString("base64") } });
     }
+    // Cached prefix: system, images and shared context; only the prompt varies between related calls.
+    if (req.context) content.push({ type: "text", text: req.context, cache_control: { type: "ephemeral" } });
     content.push({ type: "text", text: req.prompt });
 
     let message: Anthropic.Beta.BetaMessage;

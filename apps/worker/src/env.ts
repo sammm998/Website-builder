@@ -19,6 +19,8 @@ const schema = z.object({
   /** Base domain for published sites: <slug>.<SITES_DOMAIN>; empty = /site/<slug> on the app origin. */
   SITES_DOMAIN: z.string().default(""),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
+  /** Pages built (and translated) at the same time inside one build; lower it if Claude rate-limits. */
+  AI_PARALLELISM: z.coerce.number().int().min(1).max(8).default(4),
   /** Health endpoint port (Railway injects PORT). */
   WORKER_PORT: z.coerce.number().int(),
   CHROMIUM_PATH: z.string().optional(),

@@ -8,6 +8,7 @@ import type { Dict } from "@/lib/i18n";
 import type { WizardState } from "@/lib/repo";
 import { Badge, Button, Input, Spinner } from "../ui";
 import { DeviceFrame } from "./device-frame";
+import { PreviewLinks } from "./preview-links";
 
 const slugify = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "min-sajt";
@@ -45,6 +46,7 @@ export function SiteStep({ state, t, act }: { state: WizardState; t: Dict["wizar
           <h2 className="display text-5xl">{t.site.title}</h2>
           <p className="mt-2 text-sm text-stone">{t.site.lead}</p>
         </div>
+        <PreviewLinks href={previewSrc} kind="build" targetId={build.id} t={t} />
         {languages.length > 1 ? (
           <div className="flex gap-1 rounded-full bg-ink/5 p-1" role="tablist">
             {languages.map((l) => (

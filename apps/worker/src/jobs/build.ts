@@ -5,6 +5,7 @@ import type { Direction, GeneratedSection } from "@redesign/schema";
 import type { JobContext } from "../context";
 import { formKeys, loadPages, loadProject, mediaIds, storedImage, visionImage, type DirectionRow, type PageRow, type ProjectRow } from "../data";
 import { ASSET_HOST, loadMedia, renderDocument, siteContext } from "../render";
+import { forEachLimited } from "../limit";
 import { qaStatus, runQa, problemsFrom } from "../qa";
 
 interface SitePageRow {
@@ -51,11 +52,15 @@ export async function runBuild(ctx: JobContext) {
     reference,
   };
 
-  // 1) Generate every page in the source language.
+  const parallel = ctx.services.env.AI_PARALLELISM;
+  // Validation warnings per page decide which pages get the (paid) visual critique below.
+  const pageWarnings = new Map<string, number>();
+
+  // 1) Generate every page in the source language, several at a time (each page is its own step).
   let done = 0;
-  for (const page of pages) {
+  await forEachLimited(pages, parallel, async (page) => {
     await ctx.progress({ phase: "pages", done, total: pages.length, current: page.path });
-    await ctx.step(`page:${page.id}`, async () => {
+    const out = await ctx.step(`page:${page.id}`, async () => {
       const existing = page.path === "/" ? direction.sections : [];
       const result = await generatePage(ctx.deps, pageCtx, page.source, existing);
       const meta = metadataFor(page, analysisRow?.seo_report ?? null);
@@ -65,8 +70,10 @@ export async function runBuild(ctx: JobContext) {
         on conflict (build_id, source_page_id, lang) do update set sections = excluded.sections, title = excluded.title, description = excluded.description`;
       return { warnings: result.warnings.length };
     });
+    pageWarnings.set(page.id, out?.warnings ?? 0);
     done++;
-  }
+    await ctx.progress({ phase: "pages", done, total: pages.length });
+  });
 
   // 2) Visual QA per page (render, automated checks, critique, at most one fix pass).
   const media = await loadMedia(sql, ctx.services.storage, ctx.projectId);
@@ -91,7 +98,7 @@ export async function runBuild(ctx: JobContext) {
     return [direction.headerHtml, direction.footerHtml, ...rows.flatMap((r) => r.sections.map((s) => s.html))];
   };
   done = 0;
-  for (const page of pages) {
+  await forEachLimited(pages, Math.min(2, parallel), async (page) => {
     await ctx.progress({ phase: "qa", done, total: pages.length, current: page.path });
     await ctx.step(`qa:${page.id}`, async () => {
       const [row] = await sql<SitePageRow[]>`select * from site_pages where build_id = ${buildId} and source_page_id = ${page.id} and lang = ${sourceLang}`;
@@ -102,6 +109,15 @@ export async function runBuild(ctx: JobContext) {
       const browser = await ctx.services.browser();
       let sections = row.sections;
       let qa = await runQa(browser, ctx.services.env, await render(sections), page.source);
+      // The paid visual critique runs where it matters: the homepage, and pages where the automated checks
+      // or the validation found something. Other pages follow the approved system and pass deterministic QA.
+      const needsCritique = page.path === "/" || problemsFrom(qa.checks).length > 0 || (pageWarnings.get(page.id) ?? 0) > 0;
+      if (!needsCritique) {
+        await saveReport(ctx, buildId, row.id, 0, qa, null);
+        const status = qaStatus(qa.checks, null);
+        await sql`update site_pages set qa_status = ${status} where id = ${row.id}`;
+        return { status, score: null, critique: false };
+      }
       const critique = await critiquePage(ctx.deps, {
         path: page.path,
         desktop: await visionImage(qa.desktop, "Rendered page, desktop 1440px:"),
@@ -127,10 +143,10 @@ export async function runBuild(ctx: JobContext) {
       }
       const status = qaStatus(qa.checks, score);
       await sql`update site_pages set qa_status = ${status} where id = ${row.id}`;
-      return { status, score };
+      return { status, score, critique: true };
     });
     done++;
-  }
+  });
 
   // 3) Translations: identical markup, translated text only.
   const targets = languages.slice(1);
@@ -142,7 +158,7 @@ export async function runBuild(ctx: JobContext) {
       return true;
     });
     done = 0;
-    for (const page of pages) {
+    await forEachLimited(pages, parallel, async (page) => {
       await ctx.progress({ phase: "translating", lang, done, total: pages.length, current: page.path });
       await ctx.step(`translate:${page.id}:${lang}`, async () => {
         const [row] = await sql<SitePageRow[]>`select * from site_pages where build_id = ${buildId} and source_page_id = ${page.id} and lang = ${sourceLang}`;
@@ -156,7 +172,7 @@ export async function runBuild(ctx: JobContext) {
         return true;
       });
       done++;
-    }
+    });
   }
 
   // 4) Final stylesheet (classes are identical across languages).

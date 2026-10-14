@@ -43,6 +43,29 @@ describe("AnthropicProvider", () => {
     expect(captured!.headers.get("anthropic-beta")).toContain("server-side-fallback-2026-07-01");
   });
 
+  it("puts shared context after the images with a cache breakpoint, before the varying prompt", async () => {
+    let body: Record<string, any> = {};
+    const fetchMock = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return sse(messageEvents(JSON.stringify({ ok: true })));
+    }) as unknown as typeof fetch;
+    const provider = new AnthropicProvider({ apiKey: "test", fetch: fetchMock });
+    await provider.generateObject({
+      purpose: "page",
+      system: "sys",
+      context: "SHARED DESIGN SYSTEM",
+      prompt: "page specific",
+      images: [{ data: Buffer.from("img"), mediaType: "image/jpeg", label: "Reference:" }],
+      schema: z.object({ ok: z.boolean() }),
+      effort: "medium",
+    });
+    const content = body["messages"][0]["content"];
+    expect(content.map((c: { type: string }) => c.type)).toEqual(["text", "image", "text", "text"]);
+    expect(content[2]).toEqual({ type: "text", text: "SHARED DESIGN SYSTEM", cache_control: { type: "ephemeral" } });
+    expect(content[3]).toEqual({ type: "text", text: "page specific" });
+    expect(body["output_config"]["effort"]).toBe("medium");
+  });
+
   it("maps refusals and invalid output to non-retried AiErrors", async () => {
     const refusal = new AnthropicProvider({ apiKey: "t", fetch: (async () => sse(messageEvents("", "refusal"))) as unknown as typeof fetch });
     await expect(refusal.generateObject({ purpose: "x", system: "s", prompt: "p", schema: z.object({}) })).rejects.toMatchObject({ kind: "refusal" });

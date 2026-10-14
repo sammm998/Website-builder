@@ -29,9 +29,10 @@ async function captureInspiration(ctx: JobContext, urls: string[]): Promise<stri
   const browser = await ctx.services.browser();
   const guard = { allowPrivate: ctx.services.env.CRAWLER_ALLOW_PRIVATE === "1", viewport: { width: 1440, height: 900 } };
   const context = await guardedContext(browser, guard);
-  const paths: string[] = [];
+  const paths: (string | null)[] = [];
   try {
-    for (const [i, url] of urls.slice(0, 3).entries()) {
+    // Captured in parallel; each page has its own tab in the guarded context.
+    await Promise.all(urls.slice(0, 3).map(async (url, i) => {
       const page = await context.newPage();
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25_000 });
@@ -40,17 +41,17 @@ async function captureInspiration(ctx: JobContext, urls: string[]): Promise<stri
         const shot = await page.screenshot({ type: "jpeg", quality: 72, clip: { x: 0, y: 0, width: 1440, height: 1800 }, fullPage: true });
         const path = `${ctx.userId}/${ctx.projectId}/inspiration-${i}.jpg`;
         await ctx.services.storage.put("screens", path, shot, "image/jpeg");
-        paths.push(path);
+        paths[i] = path;
       } catch {
         /* unreachable inspiration sites are skipped */
       } finally {
         await page.close();
       }
-    }
+    }));
   } finally {
     await context.close();
   }
-  return paths;
+  return paths.filter((p): p is string => !!p);
 }
 
 /** Stores a direction and renders its preview screenshots + CSS. */
@@ -113,9 +114,13 @@ export async function runDirections(ctx: JobContext) {
   const briefs = await ctx.step<Brief[]>("briefs", () => planDirections(ctx.deps, dctx));
   await ctx.progress({ phase: "designing", briefs: briefs.map((b) => b.name) });
   // The three directions are independent: generate them in parallel, each as its own resumable step.
+  // Directions 2 and 3 start a few seconds after the first, so they read its shared context (images,
+  // source, guide) from the prompt cache instead of paying to write it three times.
+  const stagger = ctx.services.env.AI_PROVIDER === "fake" ? 0 : 8_000;
   await Promise.all(
     briefs.map((brief, slot) =>
       ctx.step(`direction-${slot}`, async () => {
+        if (slot > 0 && stagger) await new Promise((r) => setTimeout(r, stagger));
         const result = await generateDirection(ctx.deps, dctx, brief, briefs.filter((_, i) => i !== slot));
         await saveDirection(ctx, project, slot, result.direction, result.warnings);
         return { name: result.direction.name };

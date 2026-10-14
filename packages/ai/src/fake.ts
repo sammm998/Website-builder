@@ -49,17 +49,17 @@ function tagged<T>(prompt: string, tag: string): T | null {
 
 export class FakeProvider implements AiProvider {
   readonly name = "fake";
-  calls: { purpose: string; prompt: string }[] = [];
+  calls: { purpose: string; prompt: string; context?: string; effort?: string }[] = [];
 
   async generateObject<T>(req: ObjectRequest<T>): Promise<ObjectResult<T>> {
-    this.calls.push({ purpose: req.purpose, prompt: req.prompt });
+    this.calls.push({ purpose: req.purpose, prompt: req.prompt, context: req.context, effort: req.effort });
     const data = this.answer(req);
     const parsed = req.schema.parse(data);
     return { data: parsed, usage: { provider: "fake", model: "fake", purpose: req.purpose, inputTokens: Math.round(req.prompt.length / 4), outputTokens: Math.round(JSON.stringify(data).length / 4), costUsd: 0 } };
   }
 
   private answer(req: ObjectRequest<unknown>): unknown {
-    const p = req.prompt;
+    const p = `${req.context ?? ""}\n\n${req.prompt}`;
     switch (req.purpose) {
       case "analysis":
         return {

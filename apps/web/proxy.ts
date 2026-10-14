@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isAppHost, sitesSubdomainSlug } from "./lib/hosts";
 
-const BYPASS = /^\/(api|site|site-domain|preview|runtime|fonts|storage|_next|auth)(\/|$)|\.[a-z0-9]{2,5}$/i;
+const BYPASS = /^\/(api|site|site-domain|preview|p|runtime|fonts|storage|_next|auth)(\/|$)|\.[a-z0-9]{2,5}$/i;
 
 function preferredLocale(req: NextRequest): "sv" | "en" {
   const header = req.headers.get("accept-language") ?? "";

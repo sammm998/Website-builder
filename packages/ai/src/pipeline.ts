@@ -6,7 +6,7 @@ import {
   type GeneratedSection,
   type SourcePage,
 } from "@redesign/schema";
-import type { AiProvider, ImageInput, ObjectRequest, Usage } from "./provider";
+import { AiError, type AiProvider, type ImageInput, type ObjectRequest, type Usage } from "./provider";
 import { DESIGN_SYSTEM_GUIDE, DESIGNER_SYSTEM } from "./prompts/designer";
 import { ANALYST_SYSTEM, CRITIC_SYSTEM, TRANSLATOR_SYSTEM } from "./prompts/other";
 import { pageForPrompt, siteNavForPrompt, untrusted } from "./content";
@@ -39,10 +39,31 @@ export interface PipelineDeps {
 }
 
 async function call<T>(deps: PipelineDeps, req: ObjectRequest<T>): Promise<T> {
-  const result = await deps.ai.generateObject(req);
+  let result;
+  try {
+    result = await deps.ai.generateObject(req);
+  } catch (error) {
+    // A refused, cut-off or invalid response is still billed: record it so the shown cost is real.
+    if (error instanceof AiError && error.usage) await deps.onUsage?.(error.usage);
+    throw error;
+  }
   await deps.onUsage?.(result.usage);
   return result.data;
 }
+
+/**
+ * Thinking effort per step. The look is decided in the briefs and the three directions (high); pages,
+ * repairs and critiques follow an approved system, where medium keeps quality at a much lower token cost.
+ */
+export const EFFORT = {
+  analysis: "medium",
+  briefs: "high",
+  direction: "high",
+  page: "medium",
+  repair: "medium",
+  critique: "medium",
+  translate: "low",
+} as const;
 
 const LANG_NAME: Record<string, string> = { sv: "Swedish", en: "English", de: "German", no: "Norwegian", nb: "Norwegian Bokmål", da: "Danish", fi: "Finnish", fr: "French", es: "Spanish", it: "Italian", nl: "Dutch", pl: "Polish" };
 export const languageName = (code: string) => LANG_NAME[code.toLowerCase().split("-")[0]!] ?? code;
@@ -73,7 +94,7 @@ export async function analyzeSite(deps: PipelineDeps, input: AnalyzeInput): Prom
   return call(deps, {
     purpose: "analysis",
     system: ANALYST_SYSTEM,
-    effort: "medium",
+    effort: EFFORT.analysis,
     maxTokens: 16000,
     images: input.screenshots,
     schema: analysisOutput,
@@ -111,7 +132,7 @@ export async function planDirections(deps: PipelineDeps, ctx: DirectionContext):
   const out = await call(deps, {
     purpose: "briefs",
     system: DESIGNER_SYSTEM,
-    effort: "high",
+    effort: EFFORT.briefs,
     maxTokens: 16000,
     images: [...(ctx.current ? [ctx.current] : []), ...ctx.inspiration],
     schema: briefsOutput,
@@ -151,20 +172,24 @@ export async function generateDirection(
   const raw = await call(deps, {
     purpose: "direction",
     system: DESIGNER_SYSTEM,
-    effort: "high",
+    effort: EFFORT.direction,
     images: [...(ctx.current ? [ctx.current] : []), ...ctx.inspiration],
     schema: directionOutput,
-    prompt: [
+    // Identical for all three directions (and regenerations): read from the prompt cache after the first.
+    context: [
       "Create this design direction as real, production-quality code: the design system, the site header (logo, full navigation, mobile menu, primary CTA if the source has one), the hero and the following homepage sections, and the site footer. This preview is what the client approves; every other page will be built from the same system, header and footer.",
-      untrusted("brief", brief),
-      `The other two directions (yours must look clearly different): ${JSON.stringify(others.map((o) => ({ name: o.name, mode: o.mode, concept: o.concept })))}`,
-      feedback ? `Revise the previous version of this direction according to the client's feedback.\n${untrusted("feedback", feedback.text)}\nPrevious design system: ${JSON.stringify(feedback.previous.designSystem)}` : "",
       DESIGN_SYSTEM_GUIDE,
       untrusted("analysis", { audience: ctx.analysis.audience, tone: ctx.analysis.tone, positioning: ctx.analysis.positioning }),
       `Brand palette: ${JSON.stringify(ctx.home.palette)}.`,
       untrusted("site_navigation", siteNavForPrompt(ctx.home, ctx.validation.origin)),
       untrusted("source", pageForPrompt(ctx.home, ctx.validation.origin, indices)),
       `Return sections for sourceIndex ${indices.join(", ")} (each exactly once, in order). headerHtml is a <header> element, footerHtml a <footer> element containing ALL footer content verbatim.`,
+    ].join("\n\n"),
+    prompt: [
+      untrusted("brief", brief),
+      `The other two directions (yours must look clearly different): ${JSON.stringify(others.map((o) => ({ name: o.name, mode: o.mode, concept: o.concept })))}`,
+      feedback ? `Revise the previous version of this direction according to the client's feedback.\n${untrusted("feedback", feedback.text)}\nPrevious design system: ${JSON.stringify(feedback.previous.designSystem)}` : "",
+      "Build the direction described in the brief above.",
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -234,12 +259,14 @@ async function repair(
   const out = await call(deps, {
     purpose: "repair",
     system: DESIGNER_SYSTEM,
-    effort: "high",
+    effort: EFFORT.repair,
     schema: repairOutput,
-    prompt: [
+    context: [
       "Validation found problems in the generated code. Fix ONLY the listed problems while keeping the design, classes and motion of each section as intact as possible. Return the corrected sections (only those listed or missing), plus headerHtml and footerHtml (return them unchanged when they have no issue).",
-      issuesText(issues),
       `Design system: ${JSON.stringify(direction.designSystem)}`,
+    ].join("\n\n"),
+    prompt: [
+      issuesText(issues),
       untrusted("current_sections", toFix),
       includeLayout ? untrusted("current_layout", { headerHtml: layout.headerHtml, footerHtml: layout.footerHtml }) : "",
       untrusted("site_navigation", siteNavForPrompt(page, validation.origin)),
@@ -274,7 +301,16 @@ export interface PageContext {
   reference?: ImageInput;
 }
 
-const CHUNK = 6;
+/** Sections per page call. Most pages fit in one call, so the shared context is sent once per page. */
+const CHUNK = 12;
+
+function pageContextText(ctx: PageContext): string {
+  return [
+    "Build sections of a page in the APPROVED design direction. The page must feel like the same website as the approved homepage: reuse its design system tokens, typographic hierarchy, spacing rhythm, button styles, card styles and motion language, while composing each section freshly for its own content (do not clone the homepage layouts mechanically).",
+    `Approved design system: ${JSON.stringify(ctx.direction.designSystem)}`,
+    untrusted("approved_examples", ctx.direction.sections.slice(0, 3).map((s) => ({ archetype: s.archetype, html: s.html }))),
+  ].join("\n\n");
+}
 
 /** Generates all sections of a page (except those passed in `existing`) in the approved system. */
 export async function generatePage(
@@ -293,13 +329,13 @@ export async function generatePage(
     const raw = await call(deps, {
       purpose: "page",
       system: DESIGNER_SYSTEM,
-      effort: "high",
+      effort: EFFORT.page,
       images: ctx.reference ? [ctx.reference] : [],
       schema: pageOutput,
+      // Same for every page of the build (prompt cache): the approved system and examples.
+      context: pageContextText(ctx),
       prompt: [
-        `Build sections of the page "${page.path}" in the APPROVED design direction. The page must feel like the same website as the approved homepage: reuse its design system tokens, typographic hierarchy, spacing rhythm, button styles, card styles and motion language, while composing each section freshly for its own content (do not clone the homepage layouts mechanically).`,
-        `Approved design system: ${JSON.stringify(ctx.direction.designSystem)}`,
-        untrusted("approved_examples", ctx.direction.sections.slice(0, 3).map((s) => ({ archetype: s.archetype, html: s.html }))),
+        `Build sections of the page "${page.path}".`,
         indices.includes(-1)
           ? "sourceIndex -1 is this page's hero: give it the page's single <h1> and a signature entrance, scaled to a subpage (it can be shorter than the homepage hero)."
           : "This page's hero already exists; do not add another <h1>.",
@@ -347,7 +383,7 @@ export async function translateFragments(deps: PipelineDeps, fragments: string[]
     const out = await call(deps, {
       purpose: "translate",
       system: TRANSLATOR_SYSTEM,
-      effort: "low",
+      effort: EFFORT.translate,
       maxTokens: 32000,
       schema: translationOutput,
       prompt: [
@@ -374,7 +410,7 @@ export async function translateMeta(deps: PipelineDeps, meta: { title: string; d
   return call(deps, {
     purpose: "translate",
     system: TRANSLATOR_SYSTEM,
-    effort: "low",
+    effort: EFFORT.translate,
     maxTokens: 4000,
     schema: metaTranslationOutput,
     prompt: `Translate this page title and meta description from ${languageName(from)} to ${languageName(to)}, keeping brand names. Keep the title under 65 characters and the description under 160 characters where the source allows.\n\n${untrusted("meta", meta)}`,
@@ -392,7 +428,7 @@ export async function critiquePage(
   return call(deps, {
     purpose: "critique",
     system: CRITIC_SYSTEM,
-    effort: "high",
+    effort: EFFORT.critique,
     maxTokens: 16000,
     images: [...(input.reference ? [input.reference] : []), input.desktop, input.mobile],
     schema: critiqueOutput,

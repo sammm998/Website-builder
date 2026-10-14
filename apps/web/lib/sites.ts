@@ -80,8 +80,11 @@ export async function mediaMap(projectId: string): Promise<Map<string, MediaAsse
 
 const EMPTY_FACTS: Facts = { organizationName: "", phones: [], emails: [], addresses: [], socials: [], schemaTypes: [], openingHours: [] };
 
-/** Live preview of a design direction (owner only; caller checks ownership). */
-export async function renderDirectionPreview(userId: string, directionId: string): Promise<string | null> {
+/**
+ * Live preview of a design direction (owner only; caller checks ownership). Only the homepage exists, so
+ * every path under `basePath` shows it: clicking the navigation keeps the visitor inside the preview.
+ */
+export async function renderDirectionPreview(userId: string, directionId: string, basePath = `/preview/direction/${directionId}`): Promise<string | null> {
   const db = sql();
   const [row] = await db<{ project_id: string; design_system: DesignSystem; header_html: string; footer_html: string; sections: GeneratedSection[]; css: string; name: string; source: SourcePage | null; lang: string | null; origin: string; brand: { logoMediaId: string | null } | null }[]>`
     select d.project_id, d.design_system, d.header_html, d.footer_html, d.sections, d.css, p.name, p.source_language as lang, p.origin, p.brand,
@@ -93,7 +96,7 @@ export async function renderDirectionPreview(userId: string, directionId: string
   const ctx: SiteContext = {
     siteName: row.name,
     origin: env().APP_ORIGIN,
-    basePath: "",
+    basePath,
     assetBase: env().APP_ORIGIN,
     defaultLang: lang,
     languages: [lang],
@@ -114,8 +117,16 @@ export async function renderDirectionPreview(userId: string, directionId: string
   ).html;
 }
 
-/** Preview of a built page, navigable inside the preview iframe (owner only). */
-export async function renderBuildPreview(userId: string, buildId: string, requestPath: string): Promise<string | null> {
+/**
+ * Preview of a built page, navigable under `basePath` (the iframe, a new tab or a test link). Unknown
+ * paths show the homepage with status 404, like the published site, so visitors are never stranded.
+ */
+export async function renderBuildPreview(
+  userId: string,
+  buildId: string,
+  requestPath: string,
+  basePath = `/preview/build/${buildId}`,
+): Promise<{ html: string; status: number } | null> {
   const db = sql();
   const [build] = await db<{ project_id: string; css: string | null; layouts: Record<string, { header: string; footer: string }>; design_system: DesignSystem; name: string; origin: string; lang: string | null; targets: string[]; brand: { logoMediaId: string | null } | null }[]>`
     select b.project_id, b.css, b.layouts, d.design_system, p.name, p.origin, p.source_language as lang, p.target_languages as targets, p.brand
@@ -128,13 +139,14 @@ export async function renderBuildPreview(userId: string, buildId: string, reques
   const defaultLang = build.lang ?? "sv";
   const languages = [defaultLang, ...build.targets.filter((l) => l !== defaultLang && pages.some((p) => p.lang === l))];
   const target = resolveRequestPath(requestPath, languages, defaultLang);
-  const page = pages.find((p) => p.path === target.path && p.lang === target.lang) ?? pages.find((p) => p.path === target.path && p.lang === defaultLang);
+  const found = pages.find((p) => p.path === target.path && p.lang === target.lang) ?? pages.find((p) => p.path === target.path && p.lang === defaultLang);
+  const page = found ?? pages.find((p) => p.path === "/" && p.lang === defaultLang) ?? pages[0];
   if (!page) return null;
   const layout = build.layouts[page.lang] ?? build.layouts[defaultLang]!;
   const ctx: SiteContext = {
     siteName: build.name,
     origin: env().APP_ORIGIN,
-    basePath: `/preview/build/${buildId}`,
+    basePath,
     assetBase: env().APP_ORIGIN,
     defaultLang,
     languages,
@@ -147,7 +159,16 @@ export async function renderBuildPreview(userId: string, buildId: string, reques
     mode: "preview",
     formAction: () => "#preview",
   };
-  return renderPage({ ...page, header: layout.header, footer: layout.footer, source: page.lang === defaultLang ? page.source : null }, ctx, build.css ?? "").html;
+  const html = renderPage({ ...page, header: layout.header, footer: layout.footer, source: page.lang === defaultLang ? page.source : null }, ctx, build.css ?? "").html;
+  return { html, status: found ? 200 : 404 };
+}
+
+const PREVIEW_HEADERS = { "cache-control": "private, no-store", "x-robots-tag": "noindex, nofollow", "referrer-policy": "no-referrer" };
+
+/** Response for a preview document (sandboxed CSP: runtime scripts only, no forms). */
+export function previewResponse(html: string, status = 200): Response {
+  const res = htmlResponse(html, siteCsp({ preview: true, selfStyles: false }), PREVIEW_HEADERS);
+  return status === 200 ? res : new Response(res.body, { status, headers: res.headers });
 }
 
 export interface PublishedSite {

@@ -10,6 +10,7 @@ import type { DirectionView, WizardState } from "@/lib/repo";
 import { Button, Spinner, Textarea } from "../ui";
 import { Dialog } from "./dialog";
 import { DeviceFrame } from "./device-frame";
+import { PreviewLinks } from "./preview-links";
 
 export function DesignStep({ state, t, act, selected, onSelect }: { state: WizardState; t: Dict["wizard"]; act: (fn: () => Promise<ActionResult>) => void; selected: string | null; onSelect: (id: string) => void }) {
   const [preview, setPreview] = useState<DirectionView | null>(null);
@@ -69,7 +70,8 @@ export function DesignStep({ state, t, act, selected, onSelect }: { state: Wizar
       </div>
       <Dialog open={!!preview} onClose={() => setPreview(null)} title={preview?.name ?? ""} wide>
         {preview ? (
-          <div className="grid h-[78dvh] grid-rows-[1fr_auto] gap-4">
+          <div className="grid h-[78dvh] grid-rows-[auto_1fr_auto] gap-4">
+            <PreviewLinks href={`/preview/direction/${preview.id}`} kind="direction" targetId={preview.id} t={t} />
             <DeviceFrame src={`/preview/direction/${preview.id}`} title={preview.name} labels={t.design} />
             {!approved ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">

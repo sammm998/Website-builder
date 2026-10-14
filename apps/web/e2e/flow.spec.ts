@@ -69,6 +69,13 @@ test("redesign journey", async ({ page }) => {
   await expect(frame.locator("h1")).toContainText("Vi bygger hem som håller i generationer", { timeout: 30_000 });
   await page.waitForTimeout(2500);
   await shot(page, "07-direction-preview");
+  // The direction opens in its own tab, and the menu keeps the visitor inside the preview.
+  const [dirTab] = await Promise.all([page.context().waitForEvent("page"), page.getByRole("dialog").getByRole("link", { name: "Öppna i ny flik" }).click()]);
+  await expect(dirTab.locator("h1")).toContainText("Vi bygger hem som håller i generationer");
+  await expect(dirTab.locator("html")).toHaveClass(/m-armed/);
+  const navHref = await dirTab.locator("header a[href*='/preview/direction/']").first().getAttribute("href");
+  expect(navHref).toMatch(/^\/preview\/direction\//);
+  await dirTab.close();
   await page.getByRole("dialog").getByRole("button", { name: "Välj", exact: true }).click();
   await page.getByRole("button", { name: "Godkänn och bygg webbplatsen" }).click();
 
@@ -77,6 +84,22 @@ test("redesign journey", async ({ page }) => {
   await expect(page.frameLocator("main iframe").locator("h1")).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(2000);
   await shot(page, "08-site");
+
+  // Test link: works in a fresh browser without logging in, across pages, with the motion runtime.
+  await page.getByRole("button", { name: "Kopiera testlänk" }).click();
+  const testLink = await page.getByTestId("test-link").getAttribute("href");
+  expect(testLink).toMatch(/\/p\/[A-Za-z0-9_-]{16,}$/);
+  const guest = await (await page.context().browser()!.newContext()).newPage();
+  await guest.goto(testLink!);
+  await expect(guest.locator("h1")).toContainText("Vi bygger hem som håller i generationer");
+  await expect(guest.locator("html")).toHaveClass(/m-armed/);
+  await guest.goto(`${testLink}/tjanster`);
+  await expect(guest.locator("h1")).toHaveText("Tjänster");
+  const missing = await guest.request.get(`${testLink}/finns-inte`);
+  expect(missing.status()).toBe(404);
+  expect(await missing.text()).toContain("<h1");
+  expect((await guest.request.get(testLink!.replace(/\/p\/[^/]+$/, "/p/okandtokenokandtoken1"))).status()).toBe(404);
+  await guest.context().close();
   await page.getByRole("button", { name: "Publicera" }).click();
   const link = page.getByRole("link", { name: /\/site\// });
   await expect(link).toBeVisible({ timeout: 60_000 });

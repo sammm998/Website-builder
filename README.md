@@ -116,10 +116,27 @@ Mer i **[docs/railway.md](docs/railway.md)**.
 
 ## AI och kostnad
 
-- Standardmodell är `claude-opus-5-5`, med adaptivt tänkande och explicit effort: `high` för kod och kritik, `medium` för analys och `low` för översättning.
-- Server-side refusal fallback är aktiverad (`fallbacks: "default"`) och kan stängas av i `packages/ai/src/anthropic.ts`.
-- Kostnaden loggas per anrop i `ai_usage`, summeras per jobb och visas i wizarden.
-- `AI_MODEL_FAST` kan sättas till en billigare modell för översättningar. Standard är samma modell som för allt annat.
+- **Modell:** `claude-opus-5-5` för allt (`AI_MODEL`). `AI_MODEL_FAST` kan sättas för översättningar.
+- **Effort per steg** (`EFFORT` i `packages/ai/src/pipeline.ts`):
+  - `high`: briefs och de tre designriktningarna, som bestämmer utseendet.
+  - `medium`: analys, sidor, reparationer och visuell granskning, som följer den godkända designen.
+  - `low`: översättning.
+- **Prompt-cache:**
+  - Det som är gemensamt för många anrop skickas som cachad `context`: designsystem, godkända exempel, referensbild och källa för riktningarna.
+  - Riktning 2 och 3 startar några sekunder efter riktning 1 så att de läser cachen.
+- **Färre anrop:**
+  - En sida byggs normalt i ett enda anrop (upp till 12 sektioner).
+  - Den visuella granskningen med skärmbilder körs bara för startsidan och för sidor där den automatiska QA:n eller valideringen hittar något.
+- **Snabbare:**
+  - Sidor byggs och översätts parallellt (`AI_PARALLELISM`, standard 4). QA körs två sidor i taget.
+  - Varje sida är ett eget steg, så ett avbrutet jobb fortsätter där det slutade utan att betala igen.
+- **Kostnadsvisning:** kostnaden loggas per anrop i `ai_usage`, även för anrop som misslyckas efter att ha debiterats. Den summeras per jobb och visas i wizarden.
+- **Server-side refusal fallback** är aktiverad (`fallbacks: "default"`).
+
+## Testlänkar
+
+- I steget Design och Webbplats finns knapparna **Öppna i ny flik** (kräver inloggning) och **Kopiera testlänk**.
+- Testlänken `/p/<token>` fungerar utan inloggning i 7 dagar, även för undersidor. Den visas sandlådad, utan formulär och med `noindex`.
 
 ## Kända begränsningar
 
