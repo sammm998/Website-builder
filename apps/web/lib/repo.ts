@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { analysisSummarySchema, type AnalysisSummary, type DesignSystem } from "@redesign/schema";
+import { analysisSummarySchema, sectionTexts, type AnalysisSummary, type DesignSystem, type SourcePage } from "@redesign/schema";
 import { sql } from "./db";
 import { env } from "./env";
 
@@ -122,7 +122,8 @@ export interface WizardState {
     approved_direction_id: string | null;
     inspiration_urls: string[];
   };
-  pages: { id: string; path: string; url: string; title: string | null; included: boolean; error: string | null; status_code: number | null }[];
+  /** `sections`/`words`: how much content was read from the source page (shown so gaps are visible). */
+  pages: { id: string; path: string; url: string; title: string | null; included: boolean; error: string | null; status_code: number | null; sections: number; words: number }[];
   jobs: Partial<Record<JobKind, JobInfo>>;
   analysis: { summary: AnalysisSummary | null; seo_report: unknown; approved_at: Date | null } | null;
   directions: DirectionView[];
@@ -170,7 +171,7 @@ export async function wizardState(userId: string, projectId: string): Promise<Wi
     from projects where id = ${projectId} and user_id = ${userId}`;
   if (!project) return null;
   const [pages, jobs, analysisRows, directions, builds, sites, cost, workers] = await Promise.all([
-    db<WizardState["pages"]>`select id, path, url, title, included, error, status_code from pages where project_id = ${projectId} and user_id = ${userId} order by (path = '/') desc, path`,
+    db<(Omit<WizardState["pages"][number], "sections" | "words"> & { source: SourcePage | null })[]>`select id, path, url, title, included, error, status_code, source from pages where project_id = ${projectId} and user_id = ${userId} order by (path = '/') desc, path`,
     db<JobInfo[]>`
       select distinct on (kind) id, kind, status, progress - 'state' as progress, error, cost_usd, created_at
       from jobs where project_id = ${projectId} and user_id = ${userId} order by kind, created_at desc`,
@@ -199,7 +200,7 @@ export async function wizardState(userId: string, projectId: string): Promise<Wi
     : [];
   return {
     project,
-    pages,
+    pages: pages.map(({ source, ...p }) => ({ ...p, ...contentSize(source) })),
     jobs: Object.fromEntries(jobs.map((j) => [j.kind, j])),
     analysis: analysisRows[0] ?? null,
     directions,
@@ -316,3 +317,9 @@ export function ownsScreen(userId: string, path: string): boolean {
 }
 
 export { enqueue };
+
+function contentSize(source: SourcePage | null): { sections: number; words: number } {
+  if (!source) return { sections: 0, words: 0 };
+  const texts = [source.hero, ...source.sections].flatMap(sectionTexts);
+  return { sections: source.sections.length + 1, words: texts.join(" ").split(/\s+/).filter(Boolean).length };
+}

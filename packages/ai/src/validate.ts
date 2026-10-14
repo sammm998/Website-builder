@@ -108,12 +108,12 @@ export function validateSections(
 }
 
 /** Sanitizes header/footer and checks nav labels and footer content are preserved. */
-export function validateLayout(page: SourcePage, headerHtml: string, footerHtml: string, ctx: ValidationContext) {
+export function validateLayout(page: SourcePage, headerHtml: string, footerHtml: string, ctx: ValidationContext, menu?: { label: string }[]) {
   const header = sanitize(headerHtml, ctx);
   const footer = sanitize(footerHtml, ctx);
   const issues: SectionIssue[] = [];
   const headerText = normalizeText(header.text);
-  const missingNav = page.nav.map((l) => normalizeText(l.label)).filter((l) => l && !headerText.includes(l));
+  const missingNav = (menu ?? page.nav).map((l) => normalizeText(l.label)).filter((l) => l && !headerText.includes(l));
   if (missingNav.length) issues.push({ sourceIndex: -2, severity: "high", message: `Header is missing navigation items: ${JSON.stringify(missingNav)}` });
   if (page.logo?.mediaId && ctx.mediaIds.has(page.logo.mediaId) && !header.html.includes(`media:${page.logo.mediaId}`)) {
     issues.push({ sourceIndex: -2, severity: "medium", message: `Header must show the logo media:${page.logo.mediaId}.` });

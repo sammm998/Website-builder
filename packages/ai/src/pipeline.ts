@@ -9,7 +9,7 @@ import {
 import { AiError, type AiProvider, type ImageInput, type ObjectRequest, type Usage } from "./provider";
 import { DESIGN_SYSTEM_GUIDE, DESIGNER_SYSTEM } from "./prompts/designer";
 import { ANALYST_SYSTEM, CRITIC_SYSTEM, TRANSLATOR_SYSTEM } from "./prompts/other";
-import { pageForPrompt, siteNavForPrompt, untrusted } from "./content";
+import { MENU_RULE, pageForPrompt, siteMenu, siteNavForPrompt, untrusted, type MenuItem, type SitePageRef } from "./content";
 import {
   analysisOutput,
   briefsOutput,
@@ -119,6 +119,8 @@ export interface DirectionContext {
   inspiration: ImageInput[];
   /** Screenshot of the current homepage (what we are redesigning). */
   current?: ImageInput;
+  /** Pages that will be built: the site menu is made of exactly these. */
+  sitePages?: SitePageRef[];
 }
 
 /** Number of homepage sections (after the hero) shown in a direction preview. */
@@ -169,6 +171,7 @@ export async function generateDirection(
   feedback?: { previous: Direction; text: string },
 ): Promise<DirectionResult> {
   const indices = directionIndices(ctx.home);
+  const menu = siteMenu(ctx.home, ctx.sitePages, ctx.validation.origin);
   const raw = await call(deps, {
     purpose: "direction",
     system: DESIGNER_SYSTEM,
@@ -181,7 +184,8 @@ export async function generateDirection(
       DESIGN_SYSTEM_GUIDE,
       untrusted("analysis", { audience: ctx.analysis.audience, tone: ctx.analysis.tone, positioning: ctx.analysis.positioning }),
       `Brand palette: ${JSON.stringify(ctx.home.palette)}.`,
-      untrusted("site_navigation", siteNavForPrompt(ctx.home, ctx.validation.origin)),
+      untrusted("site_navigation", siteNavForPrompt(ctx.home, ctx.validation.origin, menu)),
+      MENU_RULE,
       untrusted("source", pageForPrompt(ctx.home, ctx.validation.origin, indices)),
       `Return sections for sourceIndex ${indices.join(", ")} (each exactly once, in order). headerHtml is a <header> element, footerHtml a <footer> element containing ALL footer content verbatim.`,
     ].join("\n\n"),
@@ -197,15 +201,15 @@ export async function generateDirection(
 
   let direction: Direction = { ...raw, sections: raw.sections };
   let { sections, issues } = validateSections(ctx.home, direction.sections, indices, ctx.validation);
-  let layout = validateLayout(ctx.home, direction.headerHtml, direction.footerHtml, ctx.validation);
+  let layout = validateLayout(ctx.home, direction.headerHtml, direction.footerHtml, ctx.validation, menu);
   const contrast = designSystemContrastIssues(direction.designSystem).map((m) => ({ sourceIndex: -2, severity: "high" as const, message: `Design system contrast: ${m}` }));
   let blocking = blockingIssues([...issues, ...layout.issues, ...contrast]);
 
   if (blocking.length) {
-    const fixed = await repair(deps, ctx.home, direction, sections, layout, blocking, ctx.validation, true);
+    const fixed = await repair(deps, ctx.home, direction, sections, layout, blocking, ctx.validation, true, menu);
     direction = fixed.direction;
     ({ sections, issues } = validateSections(ctx.home, direction.sections, indices, ctx.validation));
-    layout = validateLayout(ctx.home, direction.headerHtml, direction.footerHtml, ctx.validation);
+    layout = validateLayout(ctx.home, direction.headerHtml, direction.footerHtml, ctx.validation, menu);
     blocking = blockingIssues([...issues, ...layout.issues]);
   }
   // Guarantee: no source text is lost even if the model still dropped something.
@@ -252,6 +256,7 @@ async function repair(
   issues: SectionIssue[],
   validation: ValidationContext,
   includeLayout: boolean,
+  menu?: MenuItem[],
 ): Promise<{ direction: Direction }> {
   const failing = new Set(issues.map((i) => i.sourceIndex));
   const toFix = sections.filter((s) => failing.has(s.sourceIndex));
@@ -269,7 +274,8 @@ async function repair(
       issuesText(issues),
       untrusted("current_sections", toFix),
       includeLayout ? untrusted("current_layout", { headerHtml: layout.headerHtml, footerHtml: layout.footerHtml }) : "",
-      untrusted("site_navigation", siteNavForPrompt(page, validation.origin)),
+      includeLayout ? untrusted("site_navigation", siteNavForPrompt(page, validation.origin, menu)) : "",
+      includeLayout ? MENU_RULE : "",
       untrusted("source", pageForPrompt(page, validation.origin, [...new Set([...toFix.map((s) => s.sourceIndex), ...missing])])),
     ]
       .filter(Boolean)

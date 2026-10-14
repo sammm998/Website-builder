@@ -14,7 +14,7 @@
     }
   };
 
-  const NOISE = /(cookie|consent|gdpr|cmp-|onetrust|cookiebot|usercentrics|newsletter-popup|modal-backdrop|chat-widget|intercom|hubspot-messages|drift-|crisp-|tidio|zendesk|skip-link|screen-reader|sr-only|visually-hidden)/i;
+  const NOISE = /(cookie|consent|gdpr|cmp-|cmplz|onetrust|cookiebot|usercentrics|coi-|coiOverlay|cky-|borlabs|iubenda|didomi|termly|osano|truste|klaro|newsletter-popup|modal-backdrop|chat-widget|intercom|hubspot-messages|drift-|crisp-|tidio|zendesk|skip-link|screen-reader|sr-only|visually-hidden)/i;
 
   const visible = (el) => {
     if (!(el instanceof Element)) return true;
@@ -36,6 +36,40 @@
     const id = `${el.id || ""} ${typeof el.className === "string" ? el.className : ""} ${el.getAttribute("role") || ""} ${el.getAttribute("aria-label") || ""}`;
     return NOISE.test(id);
   };
+  /** Inside a cookie/consent platform, chat widget or modal dialog (never site content or navigation). */
+  const inNoise = (el) => {
+    for (let n = el; n && n !== document.body && n.nodeType === Node.ELEMENT_NODE; n = n.parentElement) {
+      if (n.tagName === "DIALOG" || n.getAttribute("role") === "dialog" || n.getAttribute("role") === "alertdialog" || n.getAttribute("aria-modal") === "true") return true;
+      if (isNoise(n)) return true;
+    }
+    return false;
+  };
+
+  // Content that is in the page but hidden until the visitor interacts or scrolls (accordions, tabs,
+  // <details>, entrance animations) is still content: make it visible before reading the page.
+  const PANELS = [
+    "[role=tabpanel]", ".tab-pane", ".tab-content > *", ".elementor-tab-content", ".e-n-accordion-item > *", ".e-n-tabs-content > *",
+    ".accordion-content", ".accordion-body", ".accordion-collapse", ".accordion-panel", ".collapse:not(.navbar-collapse)",
+    "[class*='accordion'][class*='content']", "[class*='accordion'][class*='panel']", "[class*='faq'][class*='answer']",
+    ".et_pb_toggle_content", ".vc_tta-panel-body", ".wp-block-details", ".kt-accordion-panel", ".uagb-faq-content",
+  ].join(",");
+  for (const d of document.querySelectorAll("details")) if (!inNoise(d)) d.open = true;
+  for (const el of document.querySelectorAll(PANELS)) {
+    if (inNoise(el) || el.closest("header, nav, [role=navigation], [role=banner]")) continue;
+    const cs = getComputedStyle(el);
+    if (cs.display === "none") el.style.setProperty("display", "block", "important");
+    if (cs.visibility === "hidden") el.style.setProperty("visibility", "visible", "important");
+    if (el.hidden) el.hidden = false;
+    if (el.getAttribute("aria-hidden") === "true") el.removeAttribute("aria-hidden");
+    if (cs.maxHeight === "0px") el.style.setProperty("max-height", "none", "important");
+  }
+  for (const el of document.querySelectorAll(".elementor-invisible, [data-aos], .wow, [data-sal], .sal-animate, .reveal, .fade-in, .animate-on-scroll")) {
+    if (inNoise(el)) continue;
+    el.classList.remove("elementor-invisible");
+    const cs = getComputedStyle(el);
+    if (cs.visibility === "hidden") el.style.setProperty("visibility", "visible", "important");
+    if (Number(cs.opacity) === 0) el.style.setProperty("opacity", "1", "important");
+  }
 
   const INLINE = new Set(["A", "ABBR", "B", "BDI", "BDO", "BR", "CITE", "CODE", "DATA", "DFN", "EM", "I", "KBD", "MARK", "Q", "S", "SAMP", "SMALL", "SPAN", "STRONG", "SUB", "SUP", "TIME", "U", "VAR", "WBR", "FONT", "LABEL"]);
   const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "CANVAS", "LINK", "META", "HEAD", "OBJECT", "EMBED", "DIALOG"]);
@@ -340,19 +374,39 @@
   // Page regions
   // ---------------------------------------------------------------------------------------------
   const body = document.body;
+  /** Same-site links in an element (navigation links point to pages of this site). */
+  const siteLinks = (el) =>
+    [...el.querySelectorAll("a[href]")].filter((a) => {
+      try {
+        const u = new URL(a.getAttribute("href"), document.baseURI);
+        return /^https?:$/.test(u.protocol) && u.hostname.replace(/^www\./, "") === location.hostname.replace(/^www\./, "");
+      } catch {
+        return false;
+      }
+    }).length;
   const pickHeader = () => {
-    const explicit = document.querySelector("body > header, body > div > header, [role=banner], header");
-    if (explicit && visible(explicit) && explicit.getBoundingClientRect().top < 200) return explicit;
-    const nav = document.querySelector("nav");
-    if (nav && nav.getBoundingClientRect().top < 200) {
+    // The site header: near the top, not part of a cookie/consent dialog, with the most links to this site.
+    const candidates = new Set(document.querySelectorAll("body > header, body > div > header, [role=banner], header"));
+    for (const nav of document.querySelectorAll("nav, [role=navigation]")) {
+      if (nav.getBoundingClientRect().top >= 300) continue;
       let el = nav;
       while (el.parentElement && el.parentElement !== body && el.parentElement.getBoundingClientRect().height < 220) el = el.parentElement;
-      return el;
+      candidates.add(el);
     }
-    return null;
+    let best = null;
+    let bestScore = 0;
+    for (const el of candidates) {
+      if (!visible(el) || inNoise(el) || el.getBoundingClientRect().top >= 300) continue;
+      const score = siteLinks(el);
+      if (score > bestScore) {
+        best = el;
+        bestScore = score;
+      }
+    }
+    return best;
   };
   const header = pickHeader();
-  const footerCandidates = [...document.querySelectorAll("footer, [role=contentinfo]")].filter(visible);
+  const footerCandidates = [...document.querySelectorAll("footer, [role=contentinfo]")].filter((f) => visible(f) && !inNoise(f));
   const footer = footerCandidates.length ? footerCandidates[footerCandidates.length - 1] : null;
   const main = document.querySelector("main, [role=main]") || body;
 
@@ -361,11 +415,11 @@
   // Content root: descend through single-child wrappers.
   let contentRoot = main;
   for (let i = 0; i < 12; i++) {
-    const kids = [...contentRoot.children].filter((c) => !SKIP.has(c.tagName) && visible(c) && !inRegion(c, header) && !inRegion(c, footer) && !(header && c.contains(header)) && !(footer && c.contains(footer)) && !isNoise(c));
+    const kids = [...contentRoot.children].filter((c) => !SKIP.has(c.tagName) && visible(c) && !inRegion(c, header) && !inRegion(c, footer) && !(header && c.contains(header)) && !(footer && c.contains(footer)) && !inNoise(c));
     if (kids.length === 1) contentRoot = kids[0];
     else break;
   }
-  const bands = [...contentRoot.children].filter((c) => !SKIP.has(c.tagName) && visible(c) && !isNoise(c) && !inRegion(c, header) && !inRegion(c, footer));
+  const bands = [...contentRoot.children].filter((c) => !SKIP.has(c.tagName) && visible(c) && !inNoise(c) && !inRegion(c, header) && !inRegion(c, footer));
   // If header/footer live inside the content root, ignore them; if main is body, also drop them.
   const bandAtoms = bands.map((band) => {
     const clone = band;
@@ -429,7 +483,7 @@
   if (header) {
     const seen = new Set();
     for (const a of header.querySelectorAll("a")) {
-      if (!visible(a) && !a.closest("nav")) continue;
+      if ((!visible(a) && !a.closest("nav")) || inNoise(a)) continue;
       // The logo link is captured as the logo, not as a navigation item.
       if (a.querySelector("img, svg") && !oneLine(a.innerText.replace(a.querySelector("svg") ? a.querySelector("svg").textContent : "", ""))) continue;
       const l = linkFrom(a);
@@ -525,7 +579,7 @@
     const key = m.getAttribute("property") || m.getAttribute("name");
     og[key] = m.getAttribute("content") || "";
   }
-  const headings = [...document.querySelectorAll("h1,h2,h3,h4,h5,h6")].filter(visible).map((h) => ({ level: Number(h.tagName[1]), text: oneLine(h.innerText) })).filter((h) => h.text);
+  const headings = [...document.querySelectorAll("h1,h2,h3,h4,h5,h6")].filter((h) => visible(h) && !inNoise(h)).map((h) => ({ level: Number(h.tagName[1]), text: oneLine(h.innerText) })).filter((h) => h.text);
   const mainText = oneLine(main.innerText || "");
 
   return {

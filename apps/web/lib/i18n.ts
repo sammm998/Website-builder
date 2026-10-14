@@ -114,6 +114,9 @@ const sv = {
       continue: "Analysera valda sidor",
       locked: "Sidlistan är låst efter analysen.",
       error: "Fel",
+      sections: "sektioner",
+      words: "ord",
+      contentHint: "Så mycket innehåll som lästes in från sidan. Allt detta följer med till den nya sajten.",
     },
     analysis: {
       title: "Analys",
@@ -291,6 +294,9 @@ const en: Dict = {
       continue: "Analyse selected pages",
       locked: "The page list is locked after analysis.",
       error: "Error",
+      sections: "sections",
+      words: "words",
+      contentHint: "How much content was read from the page. All of it is carried over to the new site.",
     },
     analysis: {
       title: "Analysis",

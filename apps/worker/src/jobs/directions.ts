@@ -20,6 +20,8 @@ async function directionContext(ctx: JobContext, project: ProjectRow): Promise<D
     validation: { origin: project.origin, mediaIds: await mediaIds(ctx), formKeys: formKeys(pages.map((p) => p.source)) },
     inspiration: inspirationImages.filter((x): x is NonNullable<typeof x> => !!x),
     current: await storedImage(ctx, home.screenshot_path, "Current homepage (the site being redesigned):", 2200),
+    // The pages that will be built make up the menu.
+    sitePages: pages.map((p) => ({ path: p.path, title: p.source.title, heading: p.source.hero.heading })),
   };
 }
 

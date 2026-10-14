@@ -167,3 +167,67 @@ describe("cost tracking", () => {
     expect(recorded).toEqual([0.5]);
   });
 });
+
+describe("site menu", () => {
+  const home = {
+    ...sampleSourcePage,
+    title: "Byggfirma Ek – Totalentreprenad i Stockholm",
+    nav: [
+      { label: "Hem", href: `${ORIGIN}/`, internal: true, primary: false },
+      { label: "Tjänster", href: `${ORIGIN}/tjanster`, internal: true, primary: false },
+      { label: "Googles sekretesspolicy", href: "https://policies.google.com/privacy", internal: false, primary: false },
+      { label: "Blogg", href: `${ORIGIN}/blogg`, internal: true, primary: false },
+      { label: "Kontakt", href: `${ORIGIN}/kontakt/`, internal: true, primary: false },
+      { label: "Ring oss", href: "tel:+4681234567", internal: false, primary: true },
+    ],
+  };
+  const pages = [
+    { path: "/", title: home.title, heading: "Vi bygger hem" },
+    { path: "/kontakt", title: "Kontakt – Byggfirma Ek", heading: "Kontakta oss" },
+    { path: "/tjanster", title: "Tjänster – Byggfirma Ek", heading: "Tjänster" },
+    { path: "/om-oss/historia", title: "Byggfirma Ek", heading: "Vår historia" },
+    { path: "/om-oss", title: "Om oss | Byggfirma Ek", heading: "Om oss" },
+  ];
+
+  it("is made of the built pages, in the source menu's order and names", async () => {
+    const { siteMenu } = await import("../src");
+    const menu = siteMenu(home, pages, ORIGIN);
+    expect(menu.map((m) => [m.label, m.href])).toEqual([
+      ["Hem", "/"],
+      ["Tjänster", "/tjanster"],
+      ["Kontakt", "/kontakt"],
+      ["Ring oss", "tel:+4681234567"],
+      ["Om oss", "/om-oss"],
+      ["Vår historia", "/om-oss/historia"],
+    ]);
+    expect(menu.find((m) => m.label === "Ring oss")!.primary).toBe(true);
+  });
+
+  it("puts items beyond the menu bar in the mobile menu only", async () => {
+    const { siteMenu, MENU_BAR_ITEMS } = await import("../src");
+    const many = Array.from({ length: 12 }, (_, i) => ({ path: `/sida-${i}`, title: `Sida ${i} – Byggfirma Ek`, heading: `Sida ${i}` }));
+    const menu = siteMenu({ ...home, nav: [] }, many, ORIGIN);
+    expect(menu.filter((m) => !m.more)).toHaveLength(MENU_BAR_ITEMS);
+    expect(menu.filter((m) => m.more).map((m) => m.label)).toEqual(["Sida 8", "Sida 9", "Sida 10", "Sida 11"]);
+  });
+
+  it("validates the header against the menu, not against links that are not pages", async () => {
+    const { siteMenu, validateLayout } = await import("../src");
+    const menu = siteMenu(home, pages, ORIGIN);
+    const header = `<header>${menu.map((m) => `<a href="${m.href}">${m.label}</a>`).join("")}<button data-toggle="menu">Meny</button></header>`;
+    const layout = validateLayout(home, header, "<footer></footer>", validation, menu);
+    expect(layout.issues.filter((i) => i.sourceIndex === -2 && i.message.includes("navigation"))).toEqual([]);
+  });
+
+  it("gives the designer the built-page menu for the header", async () => {
+    const ai = new FakeProvider();
+    const deps = { ai };
+    const analysis = await analyzeSite(deps, { pages: [home], seoSummary: { score: 70, failing: [] }, screenshots: [], outputLanguage: "sv", origin: ORIGIN });
+    const ctx = { home, analysis, validation, inspiration: [], sitePages: pages };
+    const briefs = await planDirections(deps, ctx);
+    const { direction } = await generateDirection(deps, ctx, briefs[0]!, []);
+    expect(direction.headerHtml).toContain("Vår historia");
+    expect(direction.headerHtml).not.toContain("Googles sekretesspolicy");
+    expect(direction.headerHtml).not.toContain("Blogg");
+  });
+});

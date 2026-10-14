@@ -41,7 +41,12 @@ export function PagesStep({ state, t, act }: { state: WizardState; t: Dict["wiza
               )}
               <span className="w-[38%] shrink-0 truncate font-mono text-[13px]">{p.path}</span>
               <span className={clsx("min-w-0 flex-1 truncate text-sm", p.error ? "text-ember" : "text-stone")}>{p.error ?? p.title}</span>
-              {p.status_code ? <span className="hidden text-xs text-stone sm:inline">{p.status_code}</span> : null}
+              {!p.error && p.words ? (
+                <span className="hidden shrink-0 text-xs tabular-nums text-stone sm:inline" title={t.pages.contentHint}>
+                  {p.sections} {t.pages.sections} · {p.words} {t.pages.words}
+                </span>
+              ) : null}
+              {p.status_code && p.status_code >= 400 ? <span className="hidden text-xs text-stone sm:inline">{p.status_code}</span> : null}
             </label>
           </li>
         ))}

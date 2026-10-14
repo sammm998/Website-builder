@@ -91,13 +91,81 @@ export function pageForPrompt(page: SourcePage, origin: string, indices?: number
   };
 }
 
-export function siteNavForPrompt(page: SourcePage, origin: string) {
+/** A page that is being built (for the menu): path plus what to call it if the source menu does not. */
+export interface SitePageRef {
+  path: string;
+  title: string;
+  heading: string;
+}
+
+export interface MenuItem {
+  label: string;
+  href: string;
+  /** Call-to-action link (styled as a button). */
+  primary: boolean;
+  /** Overflow item: only in the mobile/overlay menu, not in the desktop bar. */
+  more: boolean;
+}
+
+/** Items shown in the desktop menu bar; the rest go to the mobile/overlay menu. */
+export const MENU_BAR_ITEMS = 8;
+
+const normPath = (p: string) => {
+  const path = p.split("#")[0]!.split("?")[0]!.toLowerCase();
+  return path.length > 1 ? path.replace(/\/+$/, "") : "/";
+};
+
+/** Menu label for a page outside the source menu: its title before the site-name separator, else its H1. */
+function pageLabel(page: SitePageRef, siteNames: string[]): string {
+  const first = page.title.split(/\s+[|–—-]\s+/)[0]?.trim() ?? "";
+  const lower = first.toLowerCase();
+  const isSiteName = siteNames.some((n) => n && (lower === n.toLowerCase() || n.toLowerCase().startsWith(`${lower} `)));
+  return (first && !isSiteName && first.length <= 40 ? first : page.heading.trim()) || first || page.path;
+}
+
+/**
+ * The site menu = the pages that are built. Items from the source menu that point to a built page keep
+ * their label and order; built pages the source menu did not list follow (shallow paths first). A source
+ * call-to-action is kept when it points to a built page or is a phone/e-mail link. Without a page list
+ * (older callers) the source menu is used as is.
+ */
+export function siteMenu(home: SourcePage, pages: SitePageRef[] | undefined, origin: string): MenuItem[] {
+  if (!pages?.length) return home.nav.map((l, i) => ({ label: l.label, href: promptHref(l, origin), primary: l.primary, more: i >= MENU_BAR_ITEMS && !l.primary }));
+  const built = new Map(pages.map((p) => [normPath(p.path), p]));
+  const items: MenuItem[] = [];
+  const used = new Set<string>();
+  for (const link of home.nav) {
+    const href = promptHref(link, origin);
+    if (/^(tel|mailto):/.test(href)) {
+      if (link.primary) items.push({ label: link.label, href, primary: true, more: false });
+      continue;
+    }
+    const key = normPath(href);
+    if (!href.startsWith("/") || !built.has(key)) continue;
+    if (used.has(key) && !link.primary) continue;
+    used.add(key);
+    items.push({ label: link.label, href: built.get(key)!.path, primary: link.primary, more: false });
+  }
+  const names = [home.facts.organizationName, ...home.title.split(/\s+[|–—-]\s+/)];
+  const rest = pages
+    .filter((p) => !used.has(normPath(p.path)) && normPath(p.path) !== "/")
+    .sort((a, b) => a.path.split("/").length - b.path.split("/").length);
+  for (const page of rest) items.push({ label: pageLabel(page, names), href: page.path, primary: false, more: false });
+  let bar = 0;
+  return items.map((item) => (item.primary ? item : { ...item, more: bar++ >= MENU_BAR_ITEMS }));
+}
+
+export function siteNavForPrompt(page: SourcePage, origin: string, menu?: MenuItem[]) {
   return {
     logo: page.logo?.mediaId ? `media:${page.logo.mediaId}` : null,
-    nav: page.nav.map((l) => ({ label: l.label, href: promptHref(l, origin), primary: l.primary })),
+    nav: menu ?? siteMenu(page, undefined, origin),
     footer: sectionForPrompt(page.footer, page.sections.length, origin),
   };
 }
+
+/** Rule for the designer: the header menu is exactly the given items. */
+export const MENU_RULE =
+  "Header navigation: use exactly the items in site_navigation.nav, in that order, with their labels verbatim and hrefs as given. Items with more:true belong only in the mobile/overlay menu; primary:true items are call-to-action buttons. Do not add any other links to the header.";
 
 /** Wraps untrusted data so instructions inside it are not followed. */
 export function untrusted(label: string, data: unknown): string {

@@ -45,6 +45,8 @@ test("redesign journey", async ({ page }) => {
 
   // Step 1: pages appear as the crawl progresses.
   await expect(page.getByText("/om-oss/historia")).toBeVisible({ timeout: 90_000 });
+  // Each page shows how much content was read, so gaps are visible before anything is paid for.
+  await expect(page.getByText(/\d+ sektioner · \d+ ord/).first()).toBeVisible({ timeout: 90_000 });
   const analyse = page.getByRole("button", { name: "Analysera valda sidor" });
   await expect(analyse).toBeEnabled({ timeout: 90_000 });
   await shot(page, "03-pages");
@@ -88,6 +90,8 @@ test("redesign journey", async ({ page }) => {
   // Test link: works in a fresh browser without logging in, across pages, with the motion runtime.
   await page.getByRole("button", { name: "Kopiera testlänk" }).click();
   const testLink = await page.getByTestId("test-link").getAttribute("href");
+  // Menu = the built pages, including /om-oss/historia which the original menu did not list.
+  await expect(page.frameLocator("main iframe").locator("header nav").first()).toContainText("Historia");
   expect(testLink).toMatch(/\/p\/[A-Za-z0-9_-]{16,}$/);
   const guest = await (await page.context().browser()!.newContext()).newPage();
   await guest.goto(testLink!);

@@ -143,6 +143,11 @@ describe("end-to-end job flow", () => {
       expect(page.html).not.toContain("media:");
       expect(page.html).toContain('href="/site/byggfirma-ek/_site.css?v=1"');
     }
+    // The menu is made of the built pages (including /om-oss/historia, which the source menu lacked).
+    const home = published.find((p) => p.path === "/" && p.lang === "sv")!;
+    const headerHtml = /<header[\s\S]*?<\/header>/.exec(home.html)![0];
+    for (const label of ["Tjänster", "Om oss", "Kontakt", "Historia"]) expect(headerHtml).toContain(`>${label}<`);
+    expect(headerHtml).toContain('href="/site/byggfirma-ek/om-oss/historia"');
     const contact = published.find((p) => p.path === "/kontakt" && p.lang === "sv")!;
     expect(contact.html).toMatch(new RegExp(`action="https://app.example/api/forms/${site!.id}/form-1"`));
     const en = published.find((p) => p.path === "/" && p.lang === "en")!;
